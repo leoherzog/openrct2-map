@@ -1,0 +1,8 @@
+node_modules
+OpenRCT2*.AppImage
+OpenRCT2*.exe
+OpenRCT2*.tar.gz
+OpenRCT2*.zip
+OpenRCT2*.dmg
+test*/
+assets/

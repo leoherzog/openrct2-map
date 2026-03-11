@@ -1,0 +1,9 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "start": "deno run -A main.ts"
+  },
+  "imports": {
+    "sharp": "npm:sharp@^0.34"
+  }
+}
