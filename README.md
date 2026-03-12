@@ -19,17 +19,36 @@ RCT1 data (`Data/csg1.dat`) is optional and only needed for RCT1 scenarios.
 
 ## Usage
 
+> [!IMPORTANT]
+> Multiple runs will build up timeline history in the output directory. Only the deltas are saved between runs. This saves storage space, but means **you cannot simply remove a directory to clear snapshots without breaking symbolic links**. Use the `--remove` flag to clear unwanted snapshots from history, and the `--clear` flag to clear all snapshots and start fresh.
+
 ```bash
 # Render a park and serve the result
 deno run -A main.ts MyPark.park -o ./output
 uv run python3 -m http.server -d ./output
 
 # Build up a timeline — each run adds a snapshot
+# (unchanged maps are skipped automatically)
 deno run -A main.ts MyPark.park -o ./output --label "Week 1"
 deno run -A main.ts MyPark.park -o ./output --label "Week 2"
 
+# Force a snapshot even if the map hasn't changed
+deno run -A main.ts MyPark.park -o ./output --force --label "Week 2 (copy)"
+
 # Override screenshot flags (stormy weather, no guests)
 deno run -A main.ts MyPark.park -o ./output -- --weather=3 --no-peeps
+
+# List all snapshots
+deno run -A main.ts --list -o ./output
+
+# Rename a snapshot's label
+deno run -A main.ts --rename 20260312-143022 --label "New label" -o ./output
+
+# Remove a snapshot
+deno run -A main.ts --remove 20260312-143022 -o ./output
+
+# Clear all snapshots and start fresh
+deno run -A main.ts MyPark.park -o ./output --clear
 
 # Node alternative
 npx tsx main.ts MyPark.park -o ./output
@@ -37,8 +56,9 @@ npx tsx main.ts MyPark.park -o ./output
 
 ## `deno run main.ts --help`
 
-```
-Usage: deno run -A main.ts <savefile> [options] [-- openrct2-flags...]
+```bash
+$ deno run -A main.ts --help
+Usage: main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
@@ -48,7 +68,11 @@ Options:
   --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [auto-detected]
   --rct1-data-path <path>  Path to RCT1 data dir (containing Data/csg1.dat) [auto-detected]
   --label <text>           Label for this snapshot (default: current date/time)
+  --list                   List all snapshots in the output directory
+  --rename <timestamp>     Rename a snapshot label (use with --label)
   --remove <timestamp>     Remove a snapshot by its timestamp key
+  --clear                  Clear all existing snapshots before generating
+  --force                  Save snapshot even if map is unchanged from last run
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):
@@ -58,7 +82,7 @@ Extra flags after -- are forwarded to openrct2 screenshot, e.g.:
   deno run -A main.ts park.park -o out -- --no-peeps
   deno run -A main.ts park.park -o out -- --weather=3  (overrides default sunny)
 
-OpenRCT2 screenshot flags (dynamically pass after --):
+OpenRCT2 screenshot flags (pass after --):
     --weather=<int>           weather to be used (0 = default, 1 = sunny, ..., 6 = thunder).
     --no-peeps                hide peeps
     --no-sprites              hide all sprites (e.g. balloons, vehicles, guests)

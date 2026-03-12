@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as crypto from "node:crypto";
 import sharp from "sharp";
 
 const execFile = promisify(execFileCb);
@@ -182,6 +183,7 @@ async function getScreenshotFlags(bin: string): Promise<string | null> {
 interface TimePoint {
   timestamp: string;
   label: string;
+  hash?: string;
 }
 
 interface TimelineManifest {
@@ -366,7 +368,11 @@ const { values, positionals } = parseArgs({
     "rct1-data-path": { type: "string" },
     "rct2-data-path": { type: "string" },
     label: { type: "string" },
+    list: { type: "boolean", default: false },
+    rename: { type: "string" },
     remove: { type: "string" },
+    clear: { type: "boolean", default: false },
+    force: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
   // Everything after -- is collected in positionals (extra flags for openrct2)
@@ -374,10 +380,14 @@ const { values, positionals } = parseArgs({
 });
 
 const outputDir = path.resolve(values.output as string);
+const listSnapshots = values.list as boolean;
+const renameTimestamp = values.rename as string | undefined;
 const removeTimestamp = values.remove as string | undefined;
+const clearSnapshots = values.clear as boolean;
+const forceSnapshot = values.force as boolean;
 const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
 
-if (values.help || (positionals.length === 0 && !removeTimestamp)) {
+if (values.help || (positionals.length === 0 && !listSnapshots && !renameTimestamp && !removeTimestamp)) {
   let helpText = `Usage: main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
@@ -388,7 +398,11 @@ Options:
   --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [auto-detected]
   --rct1-data-path <path>  Path to RCT1 data dir (containing Data/csg1.dat) [auto-detected]
   --label <text>           Label for this snapshot (default: current date/time)
+  --list                   List all snapshots in the output directory
+  --rename <timestamp>     Rename a snapshot label (use with --label)
   --remove <timestamp>     Remove a snapshot by its timestamp key
+  --clear                  Clear all existing snapshots before generating
+  --force                  Save snapshot even if map is unchanged from last run
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):
@@ -420,7 +434,7 @@ let tmpConfigDir = "";
 let screenshotEnv: Record<string, string | undefined> = {};
 let extraFlags: string[] = [];
 
-if (!removeTimestamp) {
+if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
   inputFile = path.resolve(positionals[0]);
   zoomLevel = parseInt(values.zoom as string, 10);
   rct2DataPath = (values["rct2-data-path"] as string | undefined) ?? findRCT2Data();
@@ -792,8 +806,53 @@ ${hasTimeline ? `
 // Main
 // ---------------------------------------------------------------------------
 
+function computeSnapshotHash(pngPaths: string[]): string {
+  const hash = crypto.createHash("sha256");
+  for (const p of [...pngPaths].sort()) {
+    hash.update(fs.readFileSync(p));
+  }
+  return hash.digest("hex");
+}
+
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
+
+  // Handle --list mode
+  if (listSnapshots) {
+    const manifest = readManifest(outputDir);
+    if (!manifest || manifest.timePoints.length === 0) {
+      console.error("No snapshots found in output directory.");
+      process.exit(1);
+    }
+    for (const tp of manifest.timePoints) {
+      console.log(`${tp.timestamp}  ${tp.label}`);
+    }
+    return;
+  }
+
+  // Handle --rename mode
+  if (renameTimestamp) {
+    const manifest = readManifest(outputDir);
+    if (!manifest) {
+      console.error("Error: No timeline.json found in output directory.");
+      process.exit(1);
+    }
+    const tp = manifest.timePoints.find(tp => tp.timestamp === renameTimestamp);
+    if (!tp) {
+      console.error(`Error: Snapshot '${renameTimestamp}' not found in timeline.`);
+      console.error(`Available: ${manifest.timePoints.map(tp => tp.timestamp).join(", ")}`);
+      process.exit(1);
+    }
+    if (!values.label) {
+      console.error("Error: --rename requires --label <text> for the new label.");
+      process.exit(1);
+    }
+    tp.label = snapshotLabel;
+    writeManifest(outputDir, manifest);
+    fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest));
+    console.error(`Renamed snapshot '${renameTimestamp}' to '${snapshotLabel}'.`);
+    return;
+  }
 
   // Handle --remove mode
   if (removeTimestamp) {
@@ -803,6 +862,17 @@ async function main() {
 
   // Migrate legacy output (tiles/ at top level, no timeline.json)
   migrateLegacyOutput(outputDir, rotations);
+
+  // Clear existing snapshots if requested
+  if (clearSnapshots) {
+    const snapshotsDir = path.join(outputDir, "snapshots");
+    if (fs.existsSync(snapshotsDir)) {
+      fs.rmSync(snapshotsDir, { recursive: true, force: true });
+      console.error("Cleared existing snapshots.");
+    }
+    const manifestPath = path.join(outputDir, "timeline.json");
+    if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath);
+  }
 
   // Read existing manifest or start fresh
   let manifest = readManifest(outputDir);
@@ -816,6 +886,21 @@ async function main() {
   for (const rot of rotations) {
     const pngPath = await generateScreenshot(rot);
     giantPngs.push({ rotation: rot, path: pngPath });
+  }
+
+  // Compare hash against previous snapshot
+  const snapshotHash = computeSnapshotHash(giantPngs.map(g => g.path));
+  if (!forceSnapshot && manifest && manifest.timePoints.length > 0) {
+    const lastHash = manifest.timePoints[manifest.timePoints.length - 1].hash;
+    if (lastHash && lastHash === snapshotHash) {
+      console.error("\nMap unchanged since last snapshot — skipping. Use --force to save anyway.");
+      for (const { path: pngPath } of giantPngs) {
+        fs.unlinkSync(pngPath);
+      }
+      fs.rmSync(snapshotDir, { recursive: true, force: true });
+      fs.rmSync(tmpConfigDir, { recursive: true, force: true });
+      return;
+    }
   }
 
   // Generate tile pyramids into snapshot directory
@@ -844,7 +929,7 @@ async function main() {
   // Update manifest
   const existingPoints = manifest?.timePoints ?? [];
   manifest = {
-    timePoints: [...existingPoints, { timestamp, label: snapshotLabel }],
+    timePoints: [...existingPoints, { timestamp, label: snapshotLabel, hash: snapshotHash }],
     rotations,
     maxZoom: metadataList[0].maxZoom,
     imageWidth: metadataList[0].width,

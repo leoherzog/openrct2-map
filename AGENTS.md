@@ -154,6 +154,14 @@ deno run -A main.ts <savefile> \
 --zoom 1                         # OpenRCT2 zoom level (default: 1)
 --rotations 0,1,2,3              # which rotations to render
 --label "March update"           # custom snapshot label (default: locale date/time)
+--clear                          # clear all existing snapshots before generating
+--force                          # save even if map is unchanged from last run
+
+# List all snapshots
+deno run -A main.ts --list -o ./output
+
+# Rename a snapshot's label
+deno run -A main.ts --rename 20260312-143022 --label "New label" -o ./output
 
 # Remove a snapshot
 deno run -A main.ts --remove 20260312-143022 -o ./output
@@ -208,6 +216,10 @@ Each run appends a new timestamped snapshot to the output directory. The output 
 Timestamp format: `YYYYMMDD-HHmmss` (filesystem-safe, sorts lexicographically).
 
 Default label: `new Date().toLocaleString()`. Override with `--label`.
+
+### Change detection
+
+After generating screenshots but before tiling, a SHA-256 hash is computed over all giant PNGs (sorted by path). This hash is stored in `timeline.json` on each timepoint's `hash` field. On subsequent runs, the new hash is compared against the last timepoint's hash — if identical, the snapshot is skipped with a message. The `--force` flag bypasses this check. Snapshots created before this feature (no `hash` field) are never skipped.
 
 ### Symlink-based deduplication
 
