@@ -1,6 +1,6 @@
-# OpenRCT2 Map Viewer
+# OpenRCT2 Map Generator
 
-Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like Dynmap for Minecraft, but for RollerCoaster Tycoon 2.
+Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
 
 [![OpenRCT2](https://img.shields.io/badge/OpenRCT2-338000?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAkVJREFUeNqdkV1Ik1EYxx81I7xJoxCpQOec364aNdzU1vJjalZ+lUtdr2STOa2JoRBrV5UEQWFlK6mjC5uKEN5EF4F33o5RrezGiHlhc0PKodty/7YXDAY1nD944HDO+f/geR6KhrpayVpUpxjthHDwbI8V9QYrGstLY5NcqFKw2u7XMGmG8XB6Hh1GK+oUsu1JmitPMlXXBEZMjXAIk+D7VonPo/ehMU1CJZdGlzRVlLGKzgmUm5zo7r2IwUIRNB3FGGqthmHajat3pqCUSiIk8VuHhlCfnsNaLpBaRomJcbS8+osW3Gs0b/fRksvH36VJKimveYArlRxhEYL60yXMfVDL+Q/wYb4ke70kF8ZT1xWOVO1qStod5O/TZdV0nLvJScWFjBecU8qZK03L+fbz4b+V5l+kgAukkBVTvrKG6jI8tC/Ry7/lKGpJqb/FHcvPZfHBICgujiLCe346KTXZScrFFQosq2mlX0vvZ2cIq9+3/oQyoM0giKdKfoKVd1pQe3cJ54e+QiO/hHfXE7BAhM0fIqCtCLNPR2B848DoJy8GzVMoys6O3Eh4ujX6V5A1GaBL2oW3vQn4wgtygJpDcFoYzPY13HgyiQKR6N/rLAlN90xDK67198FyzwBHjx6/Pe0IGsXYuD2AvkdW5GdlMYqGVFzA1G2XYX45DvvHD/AHfFjfWMf442HkCoWMtsPRvFzWUibFmE6HubkZWMZeICcz00axEO7zWUoKnj8QQyQQ2EQZgmSKlWyBgGWlZ9hC9d/wHzypBADY4Fw9AAAAAElFTkSuQmCC)](#)
 [![Deno](https://img.shields.io/badge/Deno-000?logo=deno&logoColor=fff)](#)
@@ -13,9 +13,9 @@ Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — l
 |---|---|
 | **OpenRCT2** | Binary, AppImage, or system install. Auto-detected or pass `--openrct2 <path>` |
 | **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | `Data/g1.dat` from a Steam/GOG install of the original RCT2 game, or placed in `./assets/RCT/` |
-| **Deno** or **Node.js 18+** | Deno is primary; Node works via `npx tsx` |
+| **Deno 1.40+** or **Node.js >=18.17** | Deno is primary; Node works via `npx tsx` |
 
-RCT1 data (`Data/csg1.dat`) is optional and only needed for RCT1 scenarios.
+RCT1 data (`Data/csg1.dat`) is only required if your park uses RCT1 objects (rides, scenery, paths) or RCT1 scenarios.
 
 ## Usage
 
