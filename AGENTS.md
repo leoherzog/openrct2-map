@@ -4,7 +4,7 @@ Generates a Leaflet-based tile map viewer from OpenRCT2 park saves — similar t
 
 ## Architecture
 
-Single-file tool: `main.ts` (~375 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
+Single-file tool: `main.ts` (~870 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
 
 **Pipeline:** CLI parse → screenshot (openrct2) → tile (sharp) → HTML generation
 
@@ -12,7 +12,7 @@ Single-file tool: `main.ts` (~375 lines). No build step. Runs with `deno run -A 
 
 - **Runtime:** Deno (primary) or Node 18+
 - **npm:** `sharp` (only dependency, mapped in `deno.json`)
-- **External:** OpenRCT2 binary/AppImage (user-provided via `--openrct2`)
+- **External:** OpenRCT2 binary/AppImage (auto-detected in cwd or via `--openrct2`)
 - **Browser CDN:** Leaflet 1.9.4 from unpkg (loaded by generated index.html)
 
 ## OpenRCT2 CLI Quirks
@@ -25,7 +25,8 @@ openrct2 screenshot <file> <output.png> giant <zoom> <rotation> [flags]
 
 - Rotations: 0-3 (four 90-degree views)
 - Zoom: 0 = closest (1:1 pixels), higher = more zoomed out. Default 1 is a good balance.
-- Screenshot-specific flags: `--transparent`, `--tidy-up-park`, `--fix-vandalism`, `--remove-litter`, `--no-peeps`, `--no-sprites`, `--weather=N`, `--mowed-grass`, `--clear-grass`, `--water-plants`
+- Screenshot-specific flags: `--transparent`, `--tidy-up-park`, `--fix-vandalism`, `--remove-litter`, `--no-peeps`, `--no-sprites`, `--weather=N`, `--mowed-grass`, `--clear-grass`, `--water-plants`, `--draw-bounding-boxes`, `--draw-segment-heights`
+- Run `openrct2 -ha` to enumerate all screenshot flags (the `screenshot` subcommand rejects `-h`/`--help` directly)
 
 ### Global vs subcommand options
 
@@ -108,9 +109,18 @@ openrct2-map/
   main.ts                    # Single entry point (CLI, screenshots, tiling, HTML)
   AGENTS.md                  # This file
   OpenRCT2-*.AppImage        # User-provided binary (not committed)
-  assets/RCT/                # Game data (not committed)
-    Data/g1.dat, csg1.dat
-    ObjData/, Scenarios/, Tracks/
+  assets/
+    RCT/                     # Game data (not committed)
+      Data/g1.dat, csg1.dat
+      ObjData/, Scenarios/, Tracks/
+    rotate.png               # UI icons (base64-embedded in generated HTML)
+    zoom-in.png
+    zoom-out.png
+    previous.png             # Timeline step-back button
+    next.png                 # Timeline step-forward button
+    rct2.otf                 # RCT2 bitmap font
+    rct2.otf.woff2           # RCT2 font (woff2, embedded in timeline UI)
+    sprites.png              # RCT2 UI sprite sheet
   test/                      # Test park files (not committed)
 ```
 
@@ -118,23 +128,120 @@ Generated output:
 ```
 <output-dir>/
   index.html                 # Self-contained viewer (inline CSS/JS, Leaflet from CDN)
-  tiles/<rot>/<z>/<row>/<col>.png
+  timeline.json              # Manifest of all snapshots
+  snapshots/
+    <timestamp>/             # e.g. 20260312-143022
+      <rot>/<z>/<row>/<col>.png
+    <timestamp>/             # each run appends a new snapshot
+      ...
 ```
 
 ## Usage
 
 ```bash
-deno run -A main.ts <savefile> \
-  --rct2-data-path ./assets/RCT \
-  --openrct2 ./OpenRCT2-v0.4.32-linux-x86_64.AppImage \
-  -o ./output \
-  -- --transparent --tidy-up-park
+# Minimal — auto-detects everything, screenshot defaults applied
+deno run -A main.ts <savefile> -o ./output
 
-# Optional flags
---rct1-data-path ./assets/RCT   # for RCT1 content
+# Explicit overrides
+deno run -A main.ts <savefile> \
+  --openrct2 ./OpenRCT2-v0.4.32-linux-x86_64.AppImage \
+  --rct2-data-path ./assets/RCT \
+  --rct1-data-path ./assets/RCT \
+  -o ./output \
+  -- --weather=3 --no-peeps
+
+# Other flags
 --zoom 1                         # OpenRCT2 zoom level (default: 1)
 --rotations 0,1,2,3              # which rotations to render
+--label "March update"           # custom snapshot label (default: locale date/time)
+
+# Remove a snapshot
+deno run -A main.ts --remove 20260312-143022 -o ./output
 
 # Serve result
 python3 -m http.server -d ./output
 ```
+
+### Auto-discovery
+
+All three paths (binary, RCT2 data, RCT1 data) are auto-detected. CLI flags override when provided.
+
+**OpenRCT2 binary** (`findOpenRCT2()`, override: `--openrct2`):
+1. cwd: `OpenRCT2-*.AppImage`, `OpenRCT2-*.exe` (newest version first)
+2. Well-known paths: `C:\Program Files\OpenRCT2\openrct2.exe` (Windows), `/usr/bin/openrct2` (Linux), `/Applications/OpenRCT2.app/...` (macOS)
+3. PATH fallback: `openrct2`
+
+**RCT2 game data** (`findRCT2Data()`, override: `--rct2-data-path`), validated by `Data/g1.dat`:
+1. `./assets/RCT` (local project setup)
+2. Steam: `Rollercoaster Tycoon 2`, `RollerCoaster Tycoon Classic`
+3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon 2 Triple Thrill Pack`
+
+**RCT1 game data** (`findRCT1Data()`, override: `--rct1-data-path`), validated by `Data/csg1.dat`:
+1. `./assets/RCT` (same dir may contain both)
+2. Steam: `RollerCoaster Tycoon Deluxe`
+3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon Deluxe`
+
+Steam paths checked per platform:
+- Linux: `~/.local/share/Steam/steamapps/common/...`, `~/snap/steam/common/.local/share/Steam/steamapps/common/...`
+- Windows: `C:\Program Files (x86)\Steam\steamapps\common\...`
+- macOS: `~/Library/Application Support/Steam/steamapps/common/...`
+
+### Screenshot defaults
+
+When no screenshot flags are passed after `--`, these defaults are applied:
+- `--transparent` — transparent background (enables blank tile skipping)
+- `--tidy-up-park` — clears grass, waters plants, fixes vandalism, removes litter
+- `--weather=1` — forces sunny weather
+
+Each default is independently overridden: passing `--weather=3` replaces the sunny default but keeps `--transparent` and `--tidy-up-park`. Passing any individual tidy flag (e.g. `--clear-grass`) suppresses `--tidy-up-park`.
+
+### Screenshot flag enumeration
+
+`--help` runs the detected binary with `-ha`, parses the screenshot section, and appends those flags to the help output. If the binary isn't found or parsing fails, help still works — the dynamic section is simply omitted.
+
+## Timeline
+
+### Cumulative snapshots
+
+Each run appends a new timestamped snapshot to the output directory. The output directory is a persistent archive — `timeline.json` tracks all snapshots. The HTML viewer is regenerated each run.
+
+Timestamp format: `YYYYMMDD-HHmmss` (filesystem-safe, sorts lexicographically).
+
+Default label: `new Date().toLocaleString()`. Override with `--label`.
+
+### Symlink-based deduplication
+
+After tiling a new snapshot, each tile is compared byte-for-byte (`Buffer.equals`) against the corresponding tile in the previous snapshot. Identical tiles are replaced with **relative symlinks** to the real file, keeping the output directory relocatable.
+
+Key invariants:
+- Symlinks always target real files (resolved via `realpathSync`), never other symlinks — no chains
+- Relative targets ensure the output dir can be moved or served from any location
+- Dedup stats are logged: `N/M tiles symlinked (X% saved)`
+
+### Snapshot removal (`--remove`)
+
+`--remove <timestamp>` safely removes a snapshot:
+1. All symlinks in other snapshots that resolve into the doomed directory are **materialized** (replaced with copies of the real file content)
+2. The snapshot directory is deleted
+3. `timeline.json` is updated and `index.html` regenerated
+
+This ensures no dangling symlinks after removal.
+
+### Legacy migration
+
+If the output directory contains `tiles/` but no `timeline.json` (pre-timeline format), the tool auto-migrates: `tiles/` is moved to `snapshots/migrated/` and a single-entry manifest is created.
+
+### Timeline viewer
+
+When multiple snapshots exist, the HTML viewer shows a scrubber bar at the bottom:
+- **Previous/Next buttons** — `previous.png`/`next.png` (RCT2-style pixel art)
+- **Range slider** — scrub across all timepoints
+- **Label** — current snapshot label displayed in RCT2 font (`rct2.otf.woff2`)
+- Map position and zoom are preserved when switching timepoints
+- Tile layers are created lazily (only when a timepoint is first visited)
+
+Single-snapshot output has no scrubber — identical to original behavior.
+
+### Rotation button
+
+The rotate button is hidden when `CONFIG.rotations` has only one entry (e.g. `--rotations 0`). Since rotations are per-output-directory (stored in `timeline.json`), this applies to all snapshots in the timeline.
