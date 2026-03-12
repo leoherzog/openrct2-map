@@ -591,7 +591,7 @@ function generateHtml(manifest: TimelineManifest): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenRCT2 Map</title>
+<title>${manifest.timePoints[manifest.timePoints.length - 1].label}</title>
 <link rel="icon" href="${FAVICON}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.js"><\/script>
@@ -662,13 +662,32 @@ function generateHtml(manifest: TimelineManifest): string {
 (function() {
   var CONFIG = ${JSON.stringify(manifest)};
   var maxZoom = CONFIG.maxZoom;
-  var currentIdx = CONFIG.timePoints.length - 1;
+
+  // Parse URL hash state
+  function parseHash() {
+    var params = {};
+    var hash = location.hash.replace(/^#/, '');
+    if (!hash) return params;
+    hash.split('&').forEach(function(part) {
+      var kv = part.split('=');
+      if (kv.length === 2) params[kv[0]] = decodeURIComponent(kv[1]);
+    });
+    return params;
+  }
+
+  var hashState = parseHash();
+  var currentIdx = hashState.t !== undefined ? Math.min(Math.max(parseInt(hashState.t, 10), 0), CONFIG.timePoints.length - 1) : CONFIG.timePoints.length - 1;
+  if (isNaN(currentIdx)) currentIdx = CONFIG.timePoints.length - 1;
 
   var scale = Math.pow(2, maxZoom);
   var bounds = L.latLngBounds(
     L.latLng(-CONFIG.imageHeight / scale, 0),
     L.latLng(0, CONFIG.imageWidth / scale)
   );
+
+  var initLat = hashState.lat !== undefined ? parseFloat(hashState.lat) : undefined;
+  var initLng = hashState.lng !== undefined ? parseFloat(hashState.lng) : undefined;
+  var initZoom = hashState.z !== undefined ? parseInt(hashState.z, 10) : undefined;
 
   var map = L.map('map', {
     crs: L.CRS.Simple,
@@ -678,10 +697,30 @@ function generateHtml(manifest: TimelineManifest): string {
     attributionControl: false,
   });
 
-  var currentRotation = CONFIG.rotations[0];
+  var initRot = hashState.r !== undefined ? parseInt(hashState.r, 10) : undefined;
+  var currentRotation = (initRot !== undefined && CONFIG.rotations.indexOf(initRot) !== -1) ? initRot : CONFIG.rotations[0];
   var currentTimestamp = CONFIG.timePoints[currentIdx].timestamp;
   var labelEl = document.getElementById('snapshot-label');
   labelEl.textContent = CONFIG.timePoints[currentIdx].label;
+  document.title = CONFIG.timePoints[currentIdx].label;
+
+  // URL hash update (debounced)
+  var hashTimeout;
+  function updateHash() {
+    clearTimeout(hashTimeout);
+    hashTimeout = setTimeout(function() {
+      var c = map.getCenter();
+      var parts = [
+        'z=' + map.getZoom(),
+        'lat=' + c.lat.toFixed(2),
+        'lng=' + c.lng.toFixed(2),
+        'r=' + currentRotation,
+        't=' + currentIdx
+      ];
+      history.replaceState(null, '', '#' + parts.join('&'));
+    }, 150);
+  }
+  map.on('moveend', updateHash);
 
   function makeTileLayers(timestamp) {
     var layers = {};
@@ -705,7 +744,11 @@ function generateHtml(manifest: TimelineManifest): string {
 
   var tileLayers = getLayersForTimestamp(currentTimestamp);
   tileLayers[currentRotation].addTo(map);
-  map.fitBounds(bounds);
+  if (initLat !== undefined && initLng !== undefined && initZoom !== undefined && !isNaN(initLat) && !isNaN(initLng) && !isNaN(initZoom)) {
+    map.setView(L.latLng(initLat, initLng), initZoom);
+  } else {
+    map.fitBounds(bounds);
+  }
   map.setMaxBounds(bounds.pad(0.5));
 
   var ICON_ROTATE = '${ICON_ROTATE}';
@@ -723,6 +766,7 @@ function generateHtml(manifest: TimelineManifest): string {
       var btn = L.DomUtil.create('button', 'rct2-btn', container);
       btn.innerHTML = '<img src="' + ICON_ROTATE + '" alt="Rotate">';
       btn.title = 'Rotate view';
+      btn.setAttribute('aria-label', 'Rotate view');
       L.DomEvent.on(btn, 'click', function() {
         var idx = CONFIG.rotations.indexOf(currentRotation);
         var nextIdx = (idx + 1) % CONFIG.rotations.length;
@@ -731,6 +775,7 @@ function generateHtml(manifest: TimelineManifest): string {
         currentRotation = nextRot;
         tileLayers = getLayersForTimestamp(currentTimestamp);
         tileLayers[currentRotation].addTo(map);
+        updateHash();
       });
       return container;
     },
@@ -761,7 +806,9 @@ ${hasTimeline ? `
     tileLayers = getLayersForTimestamp(currentTimestamp);
     tileLayers[currentRotation].addTo(map);
     labelEl.textContent = CONFIG.timePoints[idx].label;
+    document.title = CONFIG.timePoints[idx].label;
     updateTimelineBtns();
+    updateHash();
   }
 
   var TimelineControl = L.Control.extend({
@@ -774,6 +821,7 @@ ${hasTimeline ? `
       prevBtnEl = L.DomUtil.create('button', 'rct2-btn', container);
       prevBtnEl.innerHTML = '<img src="' + ICON_PREVIOUS + '" alt="Previous">';
       prevBtnEl.title = 'Previous snapshot';
+      prevBtnEl.setAttribute('aria-label', 'Previous snapshot');
       L.DomEvent.on(prevBtnEl, 'click', function() {
         if (currentIdx > 0) switchToTimepoint(currentIdx - 1);
       });
@@ -781,6 +829,7 @@ ${hasTimeline ? `
       nextBtnEl = L.DomUtil.create('button', 'rct2-btn', container);
       nextBtnEl.innerHTML = '<img src="' + ICON_NEXT + '" alt="Next">';
       nextBtnEl.title = 'Next snapshot';
+      nextBtnEl.setAttribute('aria-label', 'Next snapshot');
       L.DomEvent.on(nextBtnEl, 'click', function() {
         if (currentIdx < CONFIG.timePoints.length - 1) switchToTimepoint(currentIdx + 1);
       });

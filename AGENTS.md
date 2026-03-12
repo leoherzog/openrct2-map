@@ -245,14 +245,14 @@ If the output directory contains `tiles/` but no `timeline.json` (pre-timeline f
 
 ### Timeline viewer
 
-When multiple snapshots exist, the HTML viewer shows a scrubber bar at the bottom:
+When multiple snapshots exist, the HTML viewer shows timeline controls (top-left):
 - **Previous/Next buttons** — `previous.png`/`next.png` (RCT2-style pixel art)
-- **Range slider** — scrub across all timepoints
-- **Label** — current snapshot label displayed in RCT2 font (`rct2.otf.woff2`)
+- **Label** — current snapshot label displayed in RCT2 font (`rct2.otf.woff2`), bottom-left corner
+- **`<title>`** — set to the current snapshot's label, updated dynamically when switching
 - Map position and zoom are preserved when switching timepoints
 - Tile layers are created lazily (only when a timepoint is first visited)
 
-Single-snapshot output has no scrubber — identical to original behavior.
+Single-snapshot output has no prev/next buttons — identical to original behavior.
 
 ### Rotation button
 

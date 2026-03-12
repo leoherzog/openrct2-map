@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenRCT2 Map</title>
+<title>3/12/2026, 1:49:09 PM</title>
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNjQwIj48c3R5bGU+LmZ7ZmlsbDojMzM4MDAwfUBtZWRpYShwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuZntmaWxsOiM5OUZGNTV9fTwvc3R5bGU+PHBhdGggb3BhY2l0eT0iLjQiIGQ9Ik02NCAyNzJDNjQgMjEwLjEgMTE0LjIgMTYwIDE3NiAxNjBMMTc2IDU0NEw2NCA1NDRMNjQgMjcyek0yMDggMTYzLjRDMjM3LjYgMTcwLjkgMjYzLjQgMTkwLjIgMjc4LjYgMjE3LjZMMzA0IDI2My4zTDMwNCA1NDRMMjA4IDU0NEwyMDggMTYzLjR6TTMzNiAzMjAuOUwzNzAuNCAzODIuN0MzODQuNCA0MDcuOSA0MDYuMyA0MjcuMiA0MzIgNDM4TDQzMiA1NDMuOUwzMzYgNTQzLjlMMzM2IDMyMC44ek00NjQgNDQ2LjhDNDY5LjcgNDQ3LjYgNDc1LjQgNDQ4IDQ4MS4yIDQ0OEM1MTguOSA0NDggNTUyLjggNDMxLjUgNTc2IDQwNS40TDU3NiA1NDRMNDY0IDU0NEw0NjQgNDQ2Ljh6IiBjbGFzcz0iZiIvPjxwYXRoIGQ9Ik0xNzYgMTYwQzExNC4yIDE2MCA2NCAyMTAuMSA2NCAyNzJMNjQgNTQ0TDMyIDU0NEwzMiAyNzJDMzIgMTkyLjUgOTYuNSAxMjggMTc2IDEyOEwxODAuNyAxMjhDMjMzIDEyOCAyODEuMiAxNTYuNCAzMDYuNiAyMDIuMUwzOTguNCAzNjcuM0M0MTUuMSAzOTcuNCA0NDYuOCA0MTYuMSA0ODEuMyA0MTYuMUM1OTYuNyA0MTYuMSA2MTEgMjQxLjggNDk2LjEgMjI1LjFMNDk2LjEgMzY1LjdDNDkxLjQgMzY3LjMgNDg2LjUgMzY4LjEgNDgxLjMgMzY4LjFDNDc1LjMgMzY4LjEgNDY5LjUgMzY3IDQ2NC4xIDM2NC44TDQ2NC4xIDIyNS45QzQ0Ny42IDIyOS4yIDQzMi4xIDIzNi45IDQxOS41IDI0OC40TDQwNi45IDI1OS45TDM4NS40IDIzNi4yTDM5OCAyMjQuN0M0MjEuMSAyMDMuNyA0NTEuMyAxOTIgNDgyLjUgMTkyQzU1MS45IDE5MiA2MDguMSAyNDguMiA2MDguMSAzMTcuNkw2MDguMSA1NDRMNTc2LjEgNTQ0TDU3Ni4xIDQwNS40QzU1Mi45IDQzMS41IDUxOSA0NDggNDgxLjMgNDQ4QzQ3NS41IDQ0OCA0NjkuOCA0NDcuNiA0NjQuMSA0NDYuOEw0NjQuMSA1NDRMNDMyLjEgNTQ0TDQzMi4xIDQzOC4xQzQwNi40IDQyNy4zIDM4NC41IDQwOCAzNzAuNSAzODIuOEwzMzYuMSAzMjFMMzM2LjEgNTQ0LjFMMzA0LjEgNTQ0LjFMMzA0LjEgMjYzLjRMMjc4LjcgMjE3LjdDMjYzLjUgMTkwLjMgMjM3LjcgMTcwLjkgMjA4LjEgMTYzLjVMMjA4LjEgNTQ0LjFMMTc2LjEgNTQ0LjFMMTc2LjEgMTYwLjF6IiBjbGFzcz0iZiIvPjwvc3ZnPgo=">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.js"></script>
@@ -72,15 +72,34 @@
 </figure>
 <script>
 (function() {
-  var CONFIG = {"timePoints":[{"timestamp":"20260312-133120","label":"Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290","hash":"479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0"}],"rotations":[0,1,2,3],"maxZoom":7,"imageWidth":19200,"imageHeight":9624};
+  var CONFIG = {"timePoints":[{"timestamp":"20260312-134909","label":"3/12/2026, 1:49:09 PM","hash":"479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0"}],"rotations":[0,1,2,3],"maxZoom":7,"imageWidth":19200,"imageHeight":9624};
   var maxZoom = CONFIG.maxZoom;
-  var currentIdx = CONFIG.timePoints.length - 1;
+
+  // Parse URL hash state
+  function parseHash() {
+    var params = {};
+    var hash = location.hash.replace(/^#/, '');
+    if (!hash) return params;
+    hash.split('&').forEach(function(part) {
+      var kv = part.split('=');
+      if (kv.length === 2) params[kv[0]] = decodeURIComponent(kv[1]);
+    });
+    return params;
+  }
+
+  var hashState = parseHash();
+  var currentIdx = hashState.t !== undefined ? Math.min(Math.max(parseInt(hashState.t, 10), 0), CONFIG.timePoints.length - 1) : CONFIG.timePoints.length - 1;
+  if (isNaN(currentIdx)) currentIdx = CONFIG.timePoints.length - 1;
 
   var scale = Math.pow(2, maxZoom);
   var bounds = L.latLngBounds(
     L.latLng(-CONFIG.imageHeight / scale, 0),
     L.latLng(0, CONFIG.imageWidth / scale)
   );
+
+  var initLat = hashState.lat !== undefined ? parseFloat(hashState.lat) : undefined;
+  var initLng = hashState.lng !== undefined ? parseFloat(hashState.lng) : undefined;
+  var initZoom = hashState.z !== undefined ? parseInt(hashState.z, 10) : undefined;
 
   var map = L.map('map', {
     crs: L.CRS.Simple,
@@ -90,10 +109,30 @@
     attributionControl: false,
   });
 
-  var currentRotation = CONFIG.rotations[0];
+  var initRot = hashState.r !== undefined ? parseInt(hashState.r, 10) : undefined;
+  var currentRotation = (initRot !== undefined && CONFIG.rotations.indexOf(initRot) !== -1) ? initRot : CONFIG.rotations[0];
   var currentTimestamp = CONFIG.timePoints[currentIdx].timestamp;
   var labelEl = document.getElementById('snapshot-label');
   labelEl.textContent = CONFIG.timePoints[currentIdx].label;
+  document.title = CONFIG.timePoints[currentIdx].label;
+
+  // URL hash update (debounced)
+  var hashTimeout;
+  function updateHash() {
+    clearTimeout(hashTimeout);
+    hashTimeout = setTimeout(function() {
+      var c = map.getCenter();
+      var parts = [
+        'z=' + map.getZoom(),
+        'lat=' + c.lat.toFixed(2),
+        'lng=' + c.lng.toFixed(2),
+        'r=' + currentRotation,
+        't=' + currentIdx
+      ];
+      history.replaceState(null, '', '#' + parts.join('&'));
+    }, 150);
+  }
+  map.on('moveend', updateHash);
 
   function makeTileLayers(timestamp) {
     var layers = {};
@@ -117,7 +156,11 @@
 
   var tileLayers = getLayersForTimestamp(currentTimestamp);
   tileLayers[currentRotation].addTo(map);
-  map.fitBounds(bounds);
+  if (initLat !== undefined && initLng !== undefined && initZoom !== undefined && !isNaN(initLat) && !isNaN(initLng) && !isNaN(initZoom)) {
+    map.setView(L.latLng(initLat, initLng), initZoom);
+  } else {
+    map.fitBounds(bounds);
+  }
   map.setMaxBounds(bounds.pad(0.5));
 
   var ICON_ROTATE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAACdQTFRFAAAAFyMj/3tz/6uj/9vX/09D/wcA4wcAxwAAqwAAjwAAcwAA//PfHRUh3gAAAAF0Uk5TAEDm2GYAAADxSURBVHjazdNRTsMwEEXR+5y2CbD/nVKS0IwfGGFNqzZC/CDy59yjiRXZ4odHfwty6T0gCQEB3gGDhLfSjB+Bo+Tm6qUQfgBOwgjEJwnfgxGwAEGN8C4QwjW2ayCMxlxJLq8k0Lj6ZoLYjgnQeKn5xQkoLnOAeg+HoXN4osyHFdR7PJ8xCV6Yj5pBvVOmJToYpsU+lPIGovW6AUIwsUwL2Byk4dwnTOEApK8ImEE3oHpDpglbRm5gdW7SNUCWDE2QoI/wt6gy2fM/VHA0YbInaCOAZhigZQwJ0OkdRhug1bsj17aPYP/Q6votvwH/4G5+AEtIfyHh01/DAAAAAElFTkSuQmCC';
@@ -135,6 +178,7 @@
       var btn = L.DomUtil.create('button', 'rct2-btn', container);
       btn.innerHTML = '<img src="' + ICON_ROTATE + '" alt="Rotate">';
       btn.title = 'Rotate view';
+      btn.setAttribute('aria-label', 'Rotate view');
       L.DomEvent.on(btn, 'click', function() {
         var idx = CONFIG.rotations.indexOf(currentRotation);
         var nextIdx = (idx + 1) % CONFIG.rotations.length;
@@ -143,6 +187,7 @@
         currentRotation = nextRot;
         tileLayers = getLayersForTimestamp(currentTimestamp);
         tileLayers[currentRotation].addTo(map);
+        updateHash();
       });
       return container;
     },

@@ -2,6 +2,9 @@
 
 Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
 
+[![Screenshot](assets/screenshot.png)](https://leoherzog.github.io/openrct2-map/)
+*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for example. Thanks to fidwell for [an awesome example park](https://rctgo.com/downloads/view/cedar-point.22290)!*
+
 [![OpenRCT2](https://img.shields.io/badge/OpenRCT2-338000?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAkVJREFUeNqdkV1Ik1EYxx81I7xJoxCpQOec364aNdzU1vJjalZ+lUtdr2STOa2JoRBrV5UEQWFlK6mjC5uKEN5EF4F33o5RrezGiHlhc0PKodty/7YXDAY1nD944HDO+f/geR6KhrpayVpUpxjthHDwbI8V9QYrGstLY5NcqFKw2u7XMGmG8XB6Hh1GK+oUsu1JmitPMlXXBEZMjXAIk+D7VonPo/ehMU1CJZdGlzRVlLGKzgmUm5zo7r2IwUIRNB3FGGqthmHajat3pqCUSiIk8VuHhlCfnsNaLpBaRomJcbS8+osW3Gs0b/fRksvH36VJKimveYArlRxhEYL60yXMfVDL+Q/wYb4ke70kF8ZT1xWOVO1qStod5O/TZdV0nLvJScWFjBecU8qZK03L+fbz4b+V5l+kgAukkBVTvrKG6jI8tC/Ry7/lKGpJqb/FHcvPZfHBICgujiLCe346KTXZScrFFQosq2mlX0vvZ2cIq9+3/oQyoM0giKdKfoKVd1pQe3cJ54e+QiO/hHfXE7BAhM0fIqCtCLNPR2B848DoJy8GzVMoys6O3Eh4ujX6V5A1GaBL2oW3vQn4wgtygJpDcFoYzPY13HgyiQKR6N/rLAlN90xDK67198FyzwBHjx6/Pe0IGsXYuD2AvkdW5GdlMYqGVFzA1G2XYX45DvvHD/AHfFjfWMf442HkCoWMtsPRvFzWUibFmE6HubkZWMZeICcz00axEO7zWUoKnj8QQyQQ2EQZgmSKlWyBgGWlZ9hC9d/wHzypBADY4Fw9AAAAAElFTkSuQmCC)](#)
 [![Deno](https://img.shields.io/badge/Deno-000?logo=deno&logoColor=fff)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-6DA55F?logo=node.js&logoColor=white)](#)
@@ -22,7 +25,7 @@ RCT1 data (`Data/csg1.dat`) is only required if your park uses RCT1 objects (rid
 > [!IMPORTANT]
 > Multiple runs will build up timeline history in the output directory. Only the deltas are saved between runs. This saves storage space, but means **you cannot simply remove a directory to clear snapshots without breaking symbolic links**. Use the `--remove` flag to clear unwanted snapshots from history, and the `--clear` flag to clear all snapshots and start fresh.
 
-```bash
+```sh
 # Render a park and serve the result
 deno run -A main.ts MyPark.park -o ./output
 uv run python3 -m http.server -d ./output
@@ -56,7 +59,7 @@ npx tsx main.ts MyPark.park -o ./output
 
 ## `deno run main.ts --help`
 
-```bash
+```sh
 $ deno run -A main.ts --help
 Usage: main.ts <savefile> [options] [-- openrct2-flags...]
 
