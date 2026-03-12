@@ -1,8 +1,8 @@
 {
   "timePoints": [
     {
-      "timestamp": "20260312-134909",
-      "label": "3/12/2026, 1:49:09 PM",
+      "timestamp": "20260312-141634",
+      "label": "3/12/2026, 2:16:32 PM",
       "hash": "479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0"
     }
   ],
@@ -14,5 +14,6 @@
   ],
   "maxZoom": 7,
   "imageWidth": 19200,
-  "imageHeight": 9624
+  "imageHeight": 9624,
+  "tileSize": 256
 }

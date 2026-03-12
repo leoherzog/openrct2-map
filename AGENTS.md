@@ -4,7 +4,7 @@ Generates a Leaflet-based tile map viewer from OpenRCT2 park saves — similar t
 
 ## Architecture
 
-Single-file tool: `main.ts` (~870 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
+Single-file tool: `main.ts` (~1000 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
 
 **Pipeline:** CLI parse → screenshot (openrct2) → tile (sharp) → HTML generation
 
@@ -13,7 +13,7 @@ Single-file tool: `main.ts` (~870 lines). No build step. Runs with `deno run -A 
 - **Runtime:** Deno (primary) or Node 18+
 - **npm:** `sharp` (only dependency, mapped in `deno.json`)
 - **External:** OpenRCT2 binary/AppImage (auto-detected in cwd or via `--openrct2`)
-- **Browser CDN:** Leaflet 1.9.4 from unpkg (loaded by generated index.html)
+- **Browser CDN:** Leaflet 1.x from jsDelivr (loaded by generated index.html)
 
 ## OpenRCT2 CLI Quirks
 
@@ -82,6 +82,15 @@ Verified empirically: a 2048x1536 image (8 cols, 6 rows) produces 6 directories 
 ### PNG format
 
 Chain `.png()` before `.tile()` to ensure PNG output with alpha channel. Without it, tiles may default to JPEG.
+
+### Performance tuning (CLI-exposed)
+
+- **`--compression 0`** — biggest speed win. Skips zlib entirely; tiles are ~3-4x larger but tiling completes ~50% faster.
+- **`--palette`** — indexed-color PNG. RCT2 sprites are inherently low-color, so this can shrink tiles 60-70% with minimal quality loss.
+- **`--effort`** — controls zlib strategy (1-10). Lower values trade file size for speed. Only meaningful when compression > 0.
+- **`--tile-size`** — stored in `timeline.json` as `tileSize` and read by the Leaflet viewer. Changing tile size on an existing output directory will cause a mismatch with older snapshots.
+- **`--skip-blanks`** — `-1` means only fully transparent tiles are skipped. Higher values (0-255) set an alpha threshold below which tiles are considered blank.
+- **`--concurrency`** — maps to `sharp.concurrency(n)`. Set to 1 on memory-constrained systems.
 
 ## Leaflet Coordinate System
 
@@ -156,6 +165,12 @@ deno run -A main.ts <savefile> \
 --label "March update"           # custom snapshot label (default: locale date/time)
 --clear                          # clear all existing snapshots before generating
 --force                          # save even if map is unchanged from last run
+--tile-size 512                  # tile size in pixels (default: 256)
+--compression 0                  # PNG compression 0-9 (default: 6, 0 = fastest)
+--effort 1                       # PNG effort 1-10 (lower = faster)
+--palette                        # indexed-color PNG (smaller for pixel art)
+--skip-blanks 10                 # alpha threshold for blank tiles (default: -1)
+--concurrency 2                  # libvips thread count (default: CPU cores)
 
 # List all snapshots
 deno run -A main.ts --list -o ./output
@@ -253,6 +268,10 @@ When multiple snapshots exist, the HTML viewer shows timeline controls (top-left
 - Tile layers are created lazily (only when a timepoint is first visited)
 
 Single-snapshot output has no prev/next buttons — identical to original behavior.
+
+### URL hash state
+
+The viewer persists map state in the URL hash fragment (`#z=3&lat=-5.00&lng=4.00&r=0&t=1`), enabling shareable links to a specific view. Parameters: `z` (zoom), `lat`/`lng` (center), `r` (rotation), `t` (timepoint index). On load, these override defaults; on interaction, the hash is updated via `history.replaceState` (debounced 150ms). Missing or invalid parameters fall back to defaults (fit bounds, rotation 0, latest timepoint).
 
 ### Rotation button
 

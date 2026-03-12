@@ -192,6 +192,7 @@ interface TimelineManifest {
   maxZoom: number;
   imageWidth: number;
   imageHeight: number;
+  tileSize?: number;
 }
 
 function readManifest(dir: string): TimelineManifest | null {
@@ -373,6 +374,12 @@ const { values, positionals } = parseArgs({
     remove: { type: "string" },
     clear: { type: "boolean", default: false },
     force: { type: "boolean", default: false },
+    "tile-size": { type: "string", default: "256" },
+    compression: { type: "string", default: "6" },
+    effort: { type: "string" },
+    palette: { type: "boolean", default: false },
+    "skip-blanks": { type: "string", default: "-1" },
+    concurrency: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
   // Everything after -- is collected in positionals (extra flags for openrct2)
@@ -386,6 +393,14 @@ const removeTimestamp = values.remove as string | undefined;
 const clearSnapshots = values.clear as boolean;
 const forceSnapshot = values.force as boolean;
 const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
+const tileSize = parseInt(values["tile-size"] as string, 10);
+const compressionLevel = parseInt(values.compression as string, 10);
+const pngEffort = values.effort !== undefined ? parseInt(values.effort as string, 10) : undefined;
+const usePalette = values.palette as boolean;
+const skipBlanks = parseInt(values["skip-blanks"] as string, 10);
+if (values.concurrency !== undefined) {
+  sharp.concurrency(parseInt(values.concurrency as string, 10));
+}
 
 if (values.help || (positionals.length === 0 && !listSnapshots && !renameTimestamp && !removeTimestamp)) {
   let helpText = `Usage: main.ts <savefile> [options] [-- openrct2-flags...]
@@ -403,6 +418,12 @@ Options:
   --remove <timestamp>     Remove a snapshot by its timestamp key
   --clear                  Clear all existing snapshots before generating
   --force                  Save snapshot even if map is unchanged from last run
+  --tile-size <n>          Tile size in pixels (default: 256)
+  --compression <0-9>      PNG compression level (default: 6, 0 = fastest)
+  --effort <1-10>          PNG compression effort/strategy tuning
+  --palette                Use indexed-color PNG (smaller files for pixel art)
+  --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
+  --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):
@@ -549,13 +570,19 @@ async function generateTiles(
     `  Tiling rotation ${rotation}: ${width}x${height}px -> ${tileDir}`,
   );
 
+  const pngOpts: sharp.PngOptions = {
+    compressionLevel,
+    ...(usePalette && { palette: true }),
+    ...(pngEffort !== undefined && { effort: pngEffort }),
+  };
+
   await sharp(giantPng)
-    .png()
+    .png(pngOpts)
     .tile({
-      size: 256,
+      size: tileSize,
       layout: "google",
       overlap: 0,
-      skipBlanks: -1,
+      skipBlanks: skipBlanks,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
     .toFile(tileDir);
@@ -728,7 +755,7 @@ function generateHtml(manifest: TimelineManifest): string {
       layers[rot] = L.tileLayer('snapshots/' + timestamp + '/' + rot + '/{z}/{y}/{x}.png', {
         minZoom: 0,
         maxZoom: maxZoom,
-        tileSize: 256,
+        tileSize: CONFIG.tileSize || 256,
         noWrap: true,
         bounds: bounds,
       });
@@ -984,6 +1011,7 @@ async function main() {
     maxZoom: metadataList[0].maxZoom,
     imageWidth: metadataList[0].width,
     imageHeight: metadataList[0].height,
+    tileSize,
   };
   writeManifest(outputDir, manifest);
 

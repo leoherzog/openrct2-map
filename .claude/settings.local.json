@@ -6,7 +6,8 @@
       "Bash(./OpenRCT2-v0.4.32-linux-x86_64.AppImage screenshot:*)",
       "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/rotate.png)",
       "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/zoom-in.png)",
-      "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/zoom-out.png)"
+      "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/zoom-out.png)",
+      "Bash(git log:*)"
     ]
   }
 }

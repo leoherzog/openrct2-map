@@ -76,6 +76,12 @@ Options:
   --remove <timestamp>     Remove a snapshot by its timestamp key
   --clear                  Clear all existing snapshots before generating
   --force                  Save snapshot even if map is unchanged from last run
+  --tile-size <n>          Tile size in pixels (default: 256)
+  --compression <0-9>      PNG compression level (default: 6, 0 = fastest)
+  --effort <1-10>          PNG compression effort/strategy tuning
+  --palette                Use indexed-color PNG (smaller files for pixel art)
+  --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
+  --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):
