@@ -1,14 +1,14 @@
 # OpenRCT2 Map Generator
 
-Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
-
-[![Screenshot](assets/screenshot.png)](https://leoherzog.github.io/openrct2-map/)
-*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for example. Thanks to fidwell for [an awesome example park](https://rctgo.com/downloads/view/cedar-point.22290)!*
-
 [![OpenRCT2](https://img.shields.io/badge/OpenRCT2-338000?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAkVJREFUeNqdkV1Ik1EYxx81I7xJoxCpQOec364aNdzU1vJjalZ+lUtdr2STOa2JoRBrV5UEQWFlK6mjC5uKEN5EF4F33o5RrezGiHlhc0PKodty/7YXDAY1nD944HDO+f/geR6KhrpayVpUpxjthHDwbI8V9QYrGstLY5NcqFKw2u7XMGmG8XB6Hh1GK+oUsu1JmitPMlXXBEZMjXAIk+D7VonPo/ehMU1CJZdGlzRVlLGKzgmUm5zo7r2IwUIRNB3FGGqthmHajat3pqCUSiIk8VuHhlCfnsNaLpBaRomJcbS8+osW3Gs0b/fRksvH36VJKimveYArlRxhEYL60yXMfVDL+Q/wYb4ke70kF8ZT1xWOVO1qStod5O/TZdV0nLvJScWFjBecU8qZK03L+fbz4b+V5l+kgAukkBVTvrKG6jI8tC/Ry7/lKGpJqb/FHcvPZfHBICgujiLCe346KTXZScrFFQosq2mlX0vvZ2cIq9+3/oQyoM0giKdKfoKVd1pQe3cJ54e+QiO/hHfXE7BAhM0fIqCtCLNPR2B848DoJy8GzVMoys6O3Eh4ujX6V5A1GaBL2oW3vQn4wgtygJpDcFoYzPY13HgyiQKR6N/rLAlN90xDK67198FyzwBHjx6/Pe0IGsXYuD2AvkdW5GdlMYqGVFzA1G2XYX45DvvHD/AHfFjfWMf442HkCoWMtsPRvFzWUibFmE6HubkZWMZeICcz00axEO7zWUoKnj8QQyQQ2EQZgmSKlWyBgGWlZ9hC9d/wHzypBADY4Fw9AAAAAElFTkSuQmCC)](#)
 [![Deno](https://img.shields.io/badge/Deno-000?logo=deno&logoColor=fff)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-6DA55F?logo=node.js&logoColor=white)](#)
 [![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)](#)
+
+Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
+
+[![Screenshot](assets/screenshot.png)](https://leoherzog.github.io/openrct2-map/)
+*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for example. Thanks to fidwell for [an awesome example park](https://rctgo.com/downloads/view/cedar-point.22290)!*
 
 ## Requirements
 
@@ -113,6 +113,17 @@ Feel free to take a look at the source and adapt as you please. This source is l
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-sa/4.0/)
 
 openrct-map is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/).
+
+### Thanks
+
+This project wouldn't be possible without:
+- [OpenRCT2](https://openrct2.io/) — the open-source re-implementation that makes this possible
+- [Chris Sawyer](https://www.chrissawyergames.com/) — legendary creator of the original RollerCoaster Tycoon
+- [The Spriters Resource](https://www.spriters-resource.com/pc_computer/rollercoastertycoon2/asset/135826/) — extracted RCT2 sprite assets
+- [RCT2 Font](https://fontstruct.com/fontstructions/show/465125/rct2) — recreation of the RollerCoaster Tycoon 2 bitmap typeface
+- [Sharp](https://sharp.pixelplumbing.com/) — high-performance image processing (powered by [libvips](https://www.libvips.org/))
+- [Leaflet](https://leafletjs.com/) — interactive map library
+- [Font Awesome](https://fontawesome.com/) — favicon
 
 ---
 
