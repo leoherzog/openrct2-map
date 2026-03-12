@@ -214,6 +214,11 @@
   "workspace": {
     "dependencies": [
       "npm:sharp@0.34"
-    ]
+    ],
+    "packageJson": {
+      "dependencies": [
+        "npm:sharp@0.34"
+      ]
+    }
   }
 }

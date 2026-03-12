@@ -378,7 +378,7 @@ const removeTimestamp = values.remove as string | undefined;
 const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
 
 if (values.help || (positionals.length === 0 && !removeTimestamp)) {
-  let helpText = `Usage: openrct2-map <savefile> [options] [-- openrct2-flags...]
+  let helpText = `Usage: main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
@@ -500,7 +500,10 @@ async function generateScreenshot(
       );
       process.exit(1);
     }
-    throw err;
+    const stderr = (err.stderr ?? "").trim();
+    console.error(`Error: openrct2 screenshot failed (exit code ${err.code ?? "unknown"}).`);
+    if (stderr) console.error(stderr);
+    process.exit(1);
   }
 
   return outPng;
@@ -863,6 +866,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(err.message ?? err);
   process.exit(1);
 });
