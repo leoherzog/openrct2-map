@@ -602,6 +602,8 @@ async function generateTiles(
 
 function generateHtml(manifest: TimelineManifest): string {
   const hasTimeline = manifest.timePoints.length > 1;
+  const lastLabel = manifest.timePoints[manifest.timePoints.length - 1].label;
+  const escLabel = lastLabel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
   const ICON_ROTATE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAACdQTFRFAAAAFyMj/3tz/6uj/9vX/09D/wcA4wcAxwAAqwAAjwAAcwAA//PfHRUh3gAAAAF0Uk5TAEDm2GYAAADxSURBVHjazdNRTsMwEEXR+5y2CbD/nVKS0IwfGGFNqzZC/CDy59yjiRXZ4odHfwty6T0gCQEB3gGDhLfSjB+Bo+Tm6qUQfgBOwgjEJwnfgxGwAEGN8C4QwjW2ayCMxlxJLq8k0Lj6ZoLYjgnQeKn5xQkoLnOAeg+HoXN4osyHFdR7PJ8xCV6Yj5pBvVOmJToYpsU+lPIGovW6AUIwsUwL2Byk4dwnTOEApK8ImEE3oHpDpglbRm5gdW7SNUCWDE2QoI/wt6gy2fM/VHA0YbInaCOAZhigZQwJ0OkdRhug1bsj17aPYP/Q6votvwH/4G5+AEtIfyHh01/DAAAAAElFTkSuQmCC';
   const ICON_ZOOM_IN = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAEJQTFRFAAAAFyMj//uP//Nf///DP1NTW3Nzb4OD/+cvg5eXt8PD7/Pz88sbn6+v16cTv4sPp28Hj1MHXysAIzMzS2NjL0NDdDvM6gAAAAF0Uk5TAEDm2GYAAAD6SURBVHjazdJdT4MwGIbh5255yzq+hrD//wM90hg3HFDjTBYDOE882MVJE+6+TZPqAbBcp18Drp/mReJv/71z3oPCpC1kFqKZxWA7No7Ak4FOyj7y2Q9pY3/cF9GXO5NyK9GN09UMpDHqMkoD0iIAn3M5jd9r/FCxnMCbprw4yYqqrs8/R2S6QufoFJU5QLAMSCpAmuUQSusJqZzepdrNL3bRbtQSPuyrSNPU7GMMh/U1LfkpE8LI5oRW2FkVadsDVW4t3WYRIhCDtdBvFqWFPFhzgD4vuq33UDiJVz25l3xonrXGF0ldb8cO3cERenQPcPyHAv1R6FF8AhbJLhhGVO4aAAAAAElFTkSuQmCC';
@@ -618,8 +620,17 @@ function generateHtml(manifest: TimelineManifest): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${manifest.timePoints[manifest.timePoints.length - 1].label}</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d0d0d">
+<meta name="description" content="OpenRCT2 Online Map">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escLabel}">
+<meta property="og:description" content="OpenRCT2 Online Map">
+<meta property="og:image" content="og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>${lastLabel}</title>
 <link rel="icon" href="${FAVICON}">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.js"><\/script>
 <style>
@@ -873,6 +884,36 @@ ${hasTimeline ? `
     zoomInText: '<img src="' + ICON_ZOOM_IN + '" alt="Zoom in">',
     zoomOutText: '<img src="' + ICON_ZOOM_OUT + '" alt="Zoom out">',
   }).addTo(map);
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', function(e) {
+    if (e.target !== document.body) return;
+    switch (e.key) {
+      case 'r':
+      case 'R':
+        if (CONFIG.rotations.length > 1) {
+          var idx = CONFIG.rotations.indexOf(currentRotation);
+          var nextIdx = (idx + 1) % CONFIG.rotations.length;
+          var nextRot = CONFIG.rotations[nextIdx];
+          map.removeLayer(tileLayers[currentRotation]);
+          currentRotation = nextRot;
+          tileLayers = getLayersForTimestamp(currentTimestamp);
+          tileLayers[currentRotation].addTo(map);
+          updateHash();
+        }
+        break;
+      case 'ArrowLeft':
+        if (typeof switchToTimepoint === 'function' && currentIdx > 0) {
+          switchToTimepoint(currentIdx - 1);
+        }
+        break;
+      case 'ArrowRight':
+        if (typeof switchToTimepoint === 'function' && currentIdx < CONFIG.timePoints.length - 1) {
+          switchToTimepoint(currentIdx + 1);
+        }
+        break;
+    }
+  });
 })();
 <\/script>
 </body>
@@ -1015,10 +1056,30 @@ async function main() {
   };
   writeManifest(outputDir, manifest);
 
+  // Generate OG preview image from first rotation's giant screenshot
+  // 2:1 downscale (crop 2400x1260, halve to 1200x630); fall back to 1:1 for small images
+  const ogPath = path.join(outputDir, "og-image.png");
+  const ogMeta = await sharp(giantPngs[0].path).metadata();
+  const use2x = ogMeta.width! >= 2400 && ogMeta.height! >= 1260;
+  const ogCropW = Math.min(use2x ? 2400 : 1200, ogMeta.width!);
+  const ogCropH = Math.min(use2x ? 1260 : 630, ogMeta.height!);
+  let ogPipeline = sharp(giantPngs[0].path)
+    .extract({
+      left: Math.floor((ogMeta.width! - ogCropW) / 2),
+      top: Math.floor((ogMeta.height! - ogCropH) / 2),
+      width: ogCropW,
+      height: ogCropH,
+    });
+  if (use2x) {
+    ogPipeline = ogPipeline.resize(ogCropW / 2, ogCropH / 2, { kernel: "nearest" });
+  }
+  await ogPipeline.png({ compressionLevel: 6 }).toFile(ogPath);
+  console.error(`OG image written to ${ogPath}`);
+
   // Generate HTML viewer
   const htmlPath = path.join(outputDir, "index.html");
   fs.writeFileSync(htmlPath, generateHtml(manifest));
-  console.error(`\nViewer written to ${htmlPath}`);
+  console.error(`Viewer written to ${htmlPath}`);
 
   // Clean up giant PNGs and temp config
   for (const { path: pngPath } of giantPngs) {
