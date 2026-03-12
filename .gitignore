@@ -6,3 +6,4 @@ OpenRCT2*.zip
 OpenRCT2*.dmg
 test*/
 assets/
+!assets/screenshot.png
