@@ -593,8 +593,8 @@ function generateHtml(manifest: TimelineManifest): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenRCT2 Map</title>
 <link rel="icon" href="${FAVICON}">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.js"><\/script>
 <style>
   @font-face {
     font-family: 'RCT2';
@@ -603,7 +603,7 @@ function generateHtml(manifest: TimelineManifest): string {
     font-style: normal;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body, #map { width: 100%; height: 100vh; background: #0d0d0d; }
+  html, body, #map { width: 100%; height: 100vh; background: #0d0d0d; position: relative; }
 
   .rct2-control {
     display: flex;
@@ -641,7 +641,7 @@ function generateHtml(manifest: TimelineManifest): string {
   .leaflet-control-zoom { border: none !important; display: flex; flex-direction: column; gap: 2px; }
 
   .snapshot-label {
-    position: fixed;
+    position: absolute;
     bottom: 8px;
     left: 8px;
     color: #fff;
@@ -655,8 +655,9 @@ function generateHtml(manifest: TimelineManifest): string {
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="snapshot-label" id="snapshot-label"></div>
+<figure id="map">
+<figcaption class="snapshot-label" id="snapshot-label"></figcaption>
+</figure>
 <script>
 (function() {
   var CONFIG = ${JSON.stringify(manifest)};
