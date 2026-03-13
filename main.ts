@@ -164,6 +164,9 @@ interface TimePoint {
   timestamp: string;
   label: string;
   hash?: string;
+  maxZoom?: number;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
 interface TimelineManifest {
@@ -720,10 +723,19 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
   var currentIdx = hashState.t !== undefined ? Math.min(Math.max(parseInt(hashState.t, 10), 0), CONFIG.timePoints.length - 1) : CONFIG.timePoints.length - 1;
   if (isNaN(currentIdx)) currentIdx = CONFIG.timePoints.length - 1;
 
-  var scale = Math.pow(2, maxZoom);
+  // Compute global bounds as union of all timepoint extents (each has its own scale)
+  var globalW = 0, globalH = 0;
+  CONFIG.timePoints.forEach(function(tp) {
+    var z = tp.maxZoom !== undefined ? tp.maxZoom : maxZoom;
+    var w = tp.imageWidth !== undefined ? tp.imageWidth : CONFIG.imageWidth;
+    var h = tp.imageHeight !== undefined ? tp.imageHeight : CONFIG.imageHeight;
+    var s = Math.pow(2, z);
+    globalW = Math.max(globalW, w / s);
+    globalH = Math.max(globalH, h / s);
+  });
   var bounds = L.latLngBounds(
-    L.latLng(-CONFIG.imageHeight / scale, 0),
-    L.latLng(0, CONFIG.imageWidth / scale)
+    L.latLng(-globalH, 0),
+    L.latLng(0, globalW)
   );
 
   var initLat = hashState.lat !== undefined ? parseFloat(hashState.lat) : undefined;
@@ -763,23 +775,38 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
   }
   map.on('moveend', updateHash);
 
-  function makeTileLayers(timestamp) {
+  function makeTileLayers(timestamp, tpMaxZoom, tpWidth, tpHeight) {
     var layers = {};
+    var tpScale = Math.pow(2, tpMaxZoom);
+    var tpBounds = L.latLngBounds(
+      L.latLng(-tpHeight / tpScale, 0),
+      L.latLng(0, tpWidth / tpScale)
+    );
     CONFIG.rotations.forEach(function(rot) {
-      layers[rot] = L.tileLayer('snapshots/' + timestamp + '/' + rot + '/{z}/{y}/{x}.png', {
+      var opts = {
         minZoom: 0,
         maxZoom: maxZoom,
         tileSize: CONFIG.tileSize || 256,
         noWrap: true,
-        bounds: bounds,
-      });
+        bounds: tpBounds,
+      };
+      if (tpMaxZoom < maxZoom) {
+        opts.maxNativeZoom = tpMaxZoom;
+      }
+      layers[rot] = L.tileLayer('snapshots/' + timestamp + '/' + rot + '/{z}/{y}/{x}.png', opts);
     });
     return layers;
   }
 
   var layerCache = {};
   function getLayersForTimestamp(ts) {
-    if (!layerCache[ts]) layerCache[ts] = makeTileLayers(ts);
+    if (!layerCache[ts]) {
+      var tp = CONFIG.timePoints.find(function(t) { return t.timestamp === ts; });
+      var tpZ = tp && tp.maxZoom !== undefined ? tp.maxZoom : maxZoom;
+      var tpW = tp && tp.imageWidth !== undefined ? tp.imageWidth : CONFIG.imageWidth;
+      var tpH = tp && tp.imageHeight !== undefined ? tp.imageHeight : CONFIG.imageHeight;
+      layerCache[ts] = makeTileLayers(ts, tpZ, tpW, tpH);
+    }
     return layerCache[ts];
   }
 
@@ -1035,12 +1062,24 @@ async function main() {
 
     // Update manifest
     const existingPoints = manifest?.timePoints ?? [];
+    const newPoint: TimePoint = {
+      timestamp,
+      label: snapshotLabel,
+      hash: snapshotHash,
+      maxZoom: Math.max(...metadataList.map(m => m.maxZoom)),
+      imageWidth: Math.max(...metadataList.map(m => m.width)),
+      imageHeight: Math.max(...metadataList.map(m => m.height)),
+    };
+    const allPoints = [...existingPoints, newPoint];
+    const prevMaxZoom = manifest?.maxZoom ?? 0;
+    const prevWidth = manifest?.imageWidth ?? 0;
+    const prevHeight = manifest?.imageHeight ?? 0;
     manifest = {
-      timePoints: [...existingPoints, { timestamp, label: snapshotLabel, hash: snapshotHash }],
+      timePoints: allPoints,
       rotations,
-      maxZoom: metadataList[0].maxZoom,
-      imageWidth: metadataList[0].width,
-      imageHeight: metadataList[0].height,
+      maxZoom: Math.max(...allPoints.map(tp => tp.maxZoom ?? prevMaxZoom)),
+      imageWidth: Math.max(...allPoints.map(tp => tp.imageWidth ?? prevWidth)),
+      imageHeight: Math.max(...allPoints.map(tp => tp.imageHeight ?? prevHeight)),
       tileSize,
     };
     writeManifest(outputDir, manifest);

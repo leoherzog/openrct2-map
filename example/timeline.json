@@ -1,9 +1,20 @@
 {
   "timePoints": [
     {
-      "timestamp": "20260312-222113",
-      "label": "Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290",
-      "hash": "479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0"
+      "timestamp": "20260313-120651",
+      "label": "Tranquility Park by Mulpje — https://rctgo.com/downloads/view/tranquility-park.19354 (Example 1)",
+      "hash": "cb93886a4be362793c53cead9573baba1715e6e614ec6c496f627af4d17802c1",
+      "maxZoom": 5,
+      "imageWidth": 8128,
+      "imageHeight": 4300
+    },
+    {
+      "timestamp": "20260313-120728",
+      "label": "Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290 (Example 2)",
+      "hash": "479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0",
+      "maxZoom": 7,
+      "imageWidth": 19200,
+      "imageHeight": 9624
     }
   ],
   "rotations": [

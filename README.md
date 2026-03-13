@@ -8,7 +8,7 @@
 Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
 
 [![Screenshot](assets/screenshot.png)](https://leoherzog.github.io/openrct2-map/)
-*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for example. Thanks to fidwell for [an awesome example park](https://rctgo.com/downloads/view/cedar-point.22290)!*
+*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for an example render. Thanks to fidwell for the awesome [Cedar Point re-creation](https://rctgo.com/downloads/view/cedar-point.22290) and to Mulpje for the astounding [Tranquality Park](https://rctgo.com/downloads/view/tranquility-park.19354) park files!*
 
 ## Requirements
 
