@@ -57,6 +57,9 @@ deno run -A main.ts MyPark.park -o ./output --clear
 npx tsx main.ts MyPark.park -o ./output
 ```
 
+> [!NOTE]
+> On Windows, tile deduplication uses symbolic links, which require either **Administrator privileges** or [**Developer Mode**](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development) to be enabled (Settings → Update & Security → For developers). Without one of these, you'll get `os error 1314: A required privilege is not held by the client`.
+
 ## `deno run main.ts --help`
 
 ```sh
