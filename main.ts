@@ -1,6 +1,5 @@
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
 import { execFile as execFileCb } from "node:child_process";
-import { promisify } from "node:util";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -9,21 +8,9 @@ import sharp from "sharp";
 
 const execFile = promisify(execFileCb);
 
-// Resolve asset paths relative to the script location, not cwd
-const scriptDir = typeof import.meta.dirname === "string"
-  ? import.meta.dirname
-  : path.dirname(new URL(import.meta.url).pathname);
-
 // ---------------------------------------------------------------------------
 // Auto-discovery helpers
 // ---------------------------------------------------------------------------
-
-function findFirstExisting(candidates: string[]): string | undefined {
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return undefined;
-}
 
 function findDataDir(validationFile: string, candidates: string[]): string | undefined {
   for (const dir of candidates) {
@@ -83,7 +70,7 @@ function findOpenRCT2(): string {
   } else if (process.platform === "linux") {
     knownPaths.push("/usr/bin/openrct2", "/usr/local/bin/openrct2");
   }
-  const found = findFirstExisting(knownPaths);
+  const found = knownPaths.find(p => fs.existsSync(p));
   if (found) return found;
 
   // 3. Fall back to openrct2 on PATH
@@ -94,45 +81,38 @@ function findOpenRCT2(): string {
 // Game data discovery
 // ---------------------------------------------------------------------------
 
-function findRCT2Data(): string | undefined {
-  const candidates: string[] = [];
-
-  // Local project setup
-  candidates.push(path.join(process.cwd(), "assets", "RCT"));
-
-  // Steam installs
+function findGameData(
+  validationFile: string,
+  steamNames: string[],
+  gogNames: string[],
+): string | undefined {
+  const candidates: string[] = [path.join(process.cwd(), "assets", "RCT")];
   for (const base of getSteamCommonDirs()) {
-    candidates.push(path.join(base, "Rollercoaster Tycoon 2"));
-    candidates.push(path.join(base, "RollerCoaster Tycoon Classic"));
+    for (const name of steamNames) candidates.push(path.join(base, name));
   }
-
-  // GOG (Windows)
   if (process.platform === "win32") {
-    candidates.push("C:\\GOG Games\\RollerCoaster Tycoon 2 Triple Thrill Pack");
-    candidates.push("C:\\Program Files (x86)\\GalaxyClient\\Games\\RollerCoaster Tycoon 2");
+    for (const name of gogNames) {
+      candidates.push(`C:\\GOG Games\\${name}`);
+      candidates.push(`C:\\Program Files (x86)\\GalaxyClient\\Games\\${name}`);
+    }
   }
+  return findDataDir(validationFile, candidates);
+}
 
-  return findDataDir(path.join("Data", "g1.dat"), candidates);
+function findRCT2Data(): string | undefined {
+  return findGameData(
+    path.join("Data", "g1.dat"),
+    ["Rollercoaster Tycoon 2", "RollerCoaster Tycoon Classic"],
+    ["RollerCoaster Tycoon 2 Triple Thrill Pack", "RollerCoaster Tycoon 2"],
+  );
 }
 
 function findRCT1Data(): string | undefined {
-  const candidates: string[] = [];
-
-  // Local project setup (same dir may contain both g1.dat and csg1.dat)
-  candidates.push(path.join(process.cwd(), "assets", "RCT"));
-
-  // Steam installs
-  for (const base of getSteamCommonDirs()) {
-    candidates.push(path.join(base, "RollerCoaster Tycoon Deluxe"));
-  }
-
-  // GOG (Windows)
-  if (process.platform === "win32") {
-    candidates.push("C:\\GOG Games\\RollerCoaster Tycoon Deluxe");
-    candidates.push("C:\\Program Files (x86)\\GalaxyClient\\Games\\RollerCoaster Tycoon Deluxe");
-  }
-
-  return findDataDir(path.join("Data", "csg1.dat"), candidates);
+  return findGameData(
+    path.join("Data", "csg1.dat"),
+    ["RollerCoaster Tycoon Deluxe"],
+    ["RollerCoaster Tycoon Deluxe"],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +179,15 @@ function readManifest(dir: string): TimelineManifest | null {
   const p = path.join(dir, "timeline.json");
   if (!fs.existsSync(p)) return null;
   return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+function requireManifest(dir: string): TimelineManifest {
+  const manifest = readManifest(dir);
+  if (!manifest) {
+    console.error("Error: No timeline.json found in output directory.");
+    process.exit(1);
+  }
+  return manifest;
 }
 
 function writeManifest(dir: string, manifest: TimelineManifest): void {
@@ -311,12 +300,8 @@ function materializeSymlinksPointingTo(dir: string, targetPrefix: string): void 
   }
 }
 
-function removeSnapshot(outputDir: string, timestamp: string): void {
-  const manifest = readManifest(outputDir);
-  if (!manifest) {
-    console.error("Error: No timeline.json found in output directory.");
-    process.exit(1);
-  }
+function removeSnapshot(outputDir: string, timestamp: string, domain?: string): void {
+  const manifest = requireManifest(outputDir);
 
   if (manifest.timePoints.length <= 1) {
     console.error("Error: Cannot remove the last snapshot.");
@@ -350,7 +335,7 @@ function removeSnapshot(outputDir: string, timestamp: string): void {
   manifest.timePoints.splice(idx, 1);
   writeManifest(outputDir, manifest);
 
-  fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest));
+  fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain));
 
   console.error(`Removed snapshot '${timestamp}'. ${manifest.timePoints.length} snapshot(s) remain.`);
 }
@@ -380,6 +365,7 @@ const { values, positionals } = parseArgs({
     palette: { type: "boolean", default: false },
     "skip-blanks": { type: "string", default: "-1" },
     concurrency: { type: "string" },
+    domain: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
   // Everything after -- is collected in positionals (extra flags for openrct2)
@@ -393,13 +379,20 @@ const removeTimestamp = values.remove as string | undefined;
 const clearSnapshots = values.clear as boolean;
 const forceSnapshot = values.force as boolean;
 const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
-const tileSize = parseInt(values["tile-size"] as string, 10);
-const compressionLevel = parseInt(values.compression as string, 10);
-const pngEffort = values.effort !== undefined ? parseInt(values.effort as string, 10) : undefined;
+function requireInt(value: string, name: string): number {
+  const n = parseInt(value, 10);
+  if (isNaN(n)) { console.error(`Error: --${name} must be a number, got '${value}'`); process.exit(1); }
+  return n;
+}
+
+const tileSize = requireInt(values["tile-size"] as string, "tile-size");
+const compressionLevel = requireInt(values.compression as string, "compression");
+const pngEffort = values.effort !== undefined ? requireInt(values.effort as string, "effort") : undefined;
 const usePalette = values.palette as boolean;
-const skipBlanks = parseInt(values["skip-blanks"] as string, 10);
+const skipBlanks = requireInt(values["skip-blanks"] as string, "skip-blanks");
+const domain = values.domain as string | undefined;
 if (values.concurrency !== undefined) {
-  sharp.concurrency(parseInt(values.concurrency as string, 10));
+  sharp.concurrency(requireInt(values.concurrency as string, "concurrency"));
 }
 
 if (values.help || (positionals.length === 0 && !listSnapshots && !renameTimestamp && !removeTimestamp)) {
@@ -424,6 +417,7 @@ Options:
   --palette                Use indexed-color PNG (smaller files for pixel art)
   --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
+  --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):
@@ -457,7 +451,7 @@ let extraFlags: string[] = [];
 
 if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
   inputFile = path.resolve(positionals[0]);
-  zoomLevel = parseInt(values.zoom as string, 10);
+  zoomLevel = requireInt(values.zoom as string, "zoom");
   rct2DataPath = (values["rct2-data-path"] as string | undefined) ?? findRCT2Data();
   rct1DataPath = (values["rct1-data-path"] as string | undefined) ?? findRCT1Data();
 
@@ -536,7 +530,9 @@ async function generateScreenshot(
       process.exit(1);
     }
     const stderr = (err.stderr ?? "").trim();
-    console.error(`Error: openrct2 screenshot failed (exit code ${err.code ?? "unknown"}).`);
+    const exitInfo = typeof err.code === "number" ? `exit code ${err.code}`
+      : err.code ? String(err.code) : "unknown error";
+    console.error(`Error: openrct2 screenshot failed (${exitInfo}).`);
     if (stderr) console.error(stderr);
     process.exit(1);
   }
@@ -597,21 +593,26 @@ async function generateTiles(
 }
 
 // ---------------------------------------------------------------------------
+// HTML generation — static asset data URIs
+// ---------------------------------------------------------------------------
+
+const ICON_ROTATE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAACdQTFRFAAAAFyMj/3tz/6uj/9vX/09D/wcA4wcAxwAAqwAAjwAAcwAA//PfHRUh3gAAAAF0Uk5TAEDm2GYAAADxSURBVHjazdNRTsMwEEXR+5y2CbD/nVKS0IwfGGFNqzZC/CDy59yjiRXZ4odHfwty6T0gCQEB3gGDhLfSjB+Bo+Tm6qUQfgBOwgjEJwnfgxGwAEGN8C4QwjW2ayCMxlxJLq8k0Lj6ZoLYjgnQeKn5xQkoLnOAeg+HoXN4osyHFdR7PJ8xCV6Yj5pBvVOmJToYpsU+lPIGovW6AUIwsUwL2Byk4dwnTOEApK8ImEE3oHpDpglbRm5gdW7SNUCWDE2QoI/wt6gy2fM/VHA0YbInaCOAZhigZQwJ0OkdRhug1bsj17aPYP/Q6votvwH/4G5+AEtIfyHh01/DAAAAAElFTkSuQmCC';
+const ICON_ZOOM_IN = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAEJQTFRFAAAAFyMj//uP//Nf///DP1NTW3Nzb4OD/+cvg5eXt8PD7/Pz88sbn6+v16cTv4sPp28Hj1MHXysAIzMzS2NjL0NDdDvM6gAAAAF0Uk5TAEDm2GYAAAD6SURBVHjazdJdT4MwGIbh5255yzq+hrD//wM90hg3HFDjTBYDOE882MVJE+6+TZPqAbBcp18Drp/mReJv/71z3oPCpC1kFqKZxWA7No7Ak4FOyj7y2Q9pY3/cF9GXO5NyK9GN09UMpDHqMkoD0iIAn3M5jd9r/FCxnMCbprw4yYqqrs8/R2S6QufoFJU5QLAMSCpAmuUQSusJqZzepdrNL3bRbtQSPuyrSNPU7GMMh/U1LfkpE8LI5oRW2FkVadsDVW4t3WYRIhCDtdBvFqWFPFhzgD4vuq33UDiJVz25l3xonrXGF0ldb8cO3cERenQPcPyHAv1R6FF8AhbJLhhGVO4aAAAAAElFTkSuQmCC';
+const ICON_ZOOM_OUT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAD9QTFRFAAAAFyMj///D//uPS2Njb4ODg5eX//Nfn6+vt8PD09vb7/Pz/+cv88sb16cTv4sPp28Hdz8AL0NDW3NzP1NTB/dKQgAAAAF0Uk5TAEDm2GYAAADnSURBVHjazZLLTsMwFETnONdpHi2FtP//hWwQCNoo5JJEIUJOKBsWPbOxNKMjW7LuANKz/zpgivpkki09hBAQsd80QCBDrk/PWk8NU28WAF2tHxwpQ11UdVVqJLc9WgjLBPcPjbSs7gAhhrbTzK4r3zwxcFGf12HI/nC4/lTYt+hSomoIIEgHuCqQHI3xtcGL/l0T1mnXKYUszm9UVRTxuH6muVNOPfSOVrCz2VDm9kizuYgaiUPPaXOxt5hHezgOfV43W/+hRuJVT+HFuuOz1jAiqTnZuUE34AwndAvg/A8L9MdC98IX3CQsGlCT6RUAAAAASUVORK5CYII=';
+const ICON_PREVIOUS = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAARpQTFRFAAAAi99zN58XW78/Uqw5Uao4Wbs+fcxn////6+zrY69PXsBCbMZTi9J37Ozsc7Rgc8hb4ePg5ubm/Pz84+Pj39/fUak4XbRGd71k/v7+9vf29fb1gM1q3uLd6erp7e3tcq9ha75UWr0/VK86fb9q9vb15ufmXaFKZcNKXL9BcbNe5+nmVaFAhc9w4+fi2traZ7RRbsZVWKlDhbh20NTPU6866OznYqtN6urqP4UsTJ80o9uT1dXVsbGxQ44vTaE1V7g9Y8JId8pfk9SB+vr6ycrJUZo85eblRHw0R5QxWLg9Y8JJhM9v+Pj3zc3Nubm5XqhI9/j2UIVBQootWLk9fMxlk9WBVLE68PDwkMSB7vLtablTR68nb89Xd3lGMgAAAAF0Uk5TAEDm2GYAAAEkSURBVHjardM/S8NgEMfx5xtSKUmL6OIfRAQR0UEDdpR2rZPi5uDbUwdBUEFEnESnKjgUNYMguigEnVK1JPV5EgfBe5qlWX7k8iEcxx2q4KEYgB2lpP+BeSWxAxdjvmygDF2lhkg6FlCFWCkfiCRQrvBhcgReexKYgDeTY8CTAGbgWYe1Sfc3p4FQAM7cY16d5U4a1CIvscl5+AwFsEw7678yzI046pX776z/8XZHiaCUVwJoJSJwa9em4i/wEIlAed28VnPgQgJ1uDS5ehtwrrPPoBrAqQSavI+emX94cCTvw1rpJMtgEg4k0PQ4NOlPVcNIXpjGVZ5qfV8G9daSnscGx3Hfpd1kT/0Bztau7SycngZqeye1AP1dYdJ+WYW3OQjwA+U4biEmzoW0AAAAAElFTkSuQmCC';
+const ICON_NEXT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAARpQTFRFAAAAi99zN58XW78/Wbs+Uao4Uqw5Y69P6+zr////fcxnbMZTc7Rg7Ozsi9J3XsBCUak439/f4+Pj/Pz85ubm4ePgc8hb9fb19vf2/v7+d71kXbRGWr0/a75Ucq9h7e3t6erp3uLdgM1q9vb1fb9qVK86XL9BZcNKXaFK5ufmVaFA5+nmcbNebsZVZ7RR2tra4+fihc9wU6860NTPhbh2WKlDYqtN6OznTJ80P4Us6urqsbGx1dXVo9uTV7g9TaE1Q44vUZo8ycrJ+vr6k9SBd8pfY8JIWLg9R5QxRHw05eblXqhIubm5zc3N+Pj3hM9vY8JJWLk9QootUIVB9/j2k9WBfMxlVLE6kMSB8PDwablT7vLtR68nb89XrxDnFwAAAAF0Uk5TAEDm2GYAAAEeSURBVHjardMxSwNBEIbheWOCgSNFbESxSyF4giBXCIqVgqhYCWLh39NOxNhGOytj0Ea0CAqCGBAPPA8uJqdZN0Ugs7km0+wH+ywMywySUWQDcKOUdACYk+4IkMeIxAmK0BEpdPORDkpALOLBhw4myhCaUCaKNDADtEyYhhd3k6ZmoamCCvBsI4kGROZp9u1jqoLKJDyZ4M1xrwGRJcI4NMHnVgVS9N9b/x0v3KiAABo2tlVQ8nmITQjqiQJWoVO3sfAtClinsXxtJbVhsAFcjfqoLYjN+83PKarDYA/ebP87PxfqPCx+vcYm7NKuamD/XGytXTpGztvmTCS4W6k5gBxwqg9t7vDEtRa53x6Qo+PUAXr3gjndm5W5m+MAf+hrdiHa73zsAAAAAElFTkSuQmCC';
+const FAVICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNjQwIj48c3R5bGU+LmZ7ZmlsbDojMzM4MDAwfUBtZWRpYShwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuZntmaWxsOiM5OUZGNTV9fTwvc3R5bGU+PHBhdGggb3BhY2l0eT0iLjQiIGQ9Ik02NCAyNzJDNjQgMjEwLjEgMTE0LjIgMTYwIDE3NiAxNjBMMTc2IDU0NEw2NCA1NDRMNjQgMjcyek0yMDggMTYzLjRDMjM3LjYgMTcwLjkgMjYzLjQgMTkwLjIgMjc4LjYgMjE3LjZMMzA0IDI2My4zTDMwNCA1NDRMMjA4IDU0NEwyMDggMTYzLjR6TTMzNiAzMjAuOUwzNzAuNCAzODIuN0MzODQuNCA0MDcuOSA0MDYuMyA0MjcuMiA0MzIgNDM4TDQzMiA1NDMuOUwzMzYgNTQzLjlMMzM2IDMyMC44ek00NjQgNDQ2LjhDNDY5LjcgNDQ3LjYgNDc1LjQgNDQ4IDQ4MS4yIDQ0OEM1MTguOSA0NDggNTUyLjggNDMxLjUgNTc2IDQwNS40TDU3NiA1NDRMNDY0IDU0NEw0NjQgNDQ2Ljh6IiBjbGFzcz0iZiIvPjxwYXRoIGQ9Ik0xNzYgMTYwQzExNC4yIDE2MCA2NCAyMTAuMSA2NCAyNzJMNjQgNTQ0TDMyIDU0NEwzMiAyNzJDMzIgMTkyLjUgOTYuNSAxMjggMTc2IDEyOEwxODAuNyAxMjhDMjMzIDEyOCAyODEuMiAxNTYuNCAzMDYuNiAyMDIuMUwzOTguNCAzNjcuM0M0MTUuMSAzOTcuNCA0NDYuOCA0MTYuMSA0ODEuMyA0MTYuMUM1OTYuNyA0MTYuMSA2MTEgMjQxLjggNDk2LjEgMjI1LjFMNDk2LjEgMzY1LjdDNDkxLjQgMzY3LjMgNDg2LjUgMzY4LjEgNDgxLjMgMzY4LjFDNDc1LjMgMzY4LjEgNDY5LjUgMzY3IDQ2NC4xIDM2NC44TDQ2NC4xIDIyNS45QzQ0Ny42IDIyOS4yIDQzMi4xIDIzNi45IDQxOS41IDI0OC40TDQwNi45IDI1OS45TDM4NS40IDIzNi4yTDM5OCAyMjQuN0M0MjEuMSAyMDMuNyA0NTEuMyAxOTIgNDgyLjUgMTkyQzU1MS45IDE5MiA2MDguMSAyNDguMiA2MDguMSAzMTcuNkw2MDguMSA1NDRMNTc2LjEgNTQ0TDU3Ni4xIDQwNS40QzU1Mi45IDQzMS41IDUxOSA0NDggNDgxLjMgNDQ4QzQ3NS41IDQ0OCA0NjkuOCA0NDcuNiA0NjQuMSA0NDYuOEw0NjQuMSA1NDRMNDMyLjEgNTQ0TDQzMi4xIDQzOC4xQzQwNi40IDQyNy4zIDM4NC41IDQwOCAzNzAuNSAzODIuOEwzMzYuMSAzMjFMMzM2LjEgNTQ0LjFMMzA0LjEgNTQ0LjFMMzA0LjEgMjYzLjRMMjc4LjcgMjE3LjdDMjYzLjUgMTkwLjMgMjM3LjcgMTcwLjkgMjA4LjEgMTYzLjVMMjA4LjEgNTQ0LjFMMTc2LjEgNTQ0LjFMMTc2LjEgMTYwLjF6IiBjbGFzcz0iZiIvPjwvc3ZnPgo=';
+const FONT_RCT2 = 'data:font/woff2;base64,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';
+
+// ---------------------------------------------------------------------------
 // HTML generation
 // ---------------------------------------------------------------------------
 
-function generateHtml(manifest: TimelineManifest): string {
+function generateHtml(manifest: TimelineManifest, domain?: string): string {
   const hasTimeline = manifest.timePoints.length > 1;
   const lastLabel = manifest.timePoints[manifest.timePoints.length - 1].label;
+  const baseUrl = domain ? domain.replace(/\/$/, "") + "/" : undefined;
   const escLabel = lastLabel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-
-  const ICON_ROTATE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAACdQTFRFAAAAFyMj/3tz/6uj/9vX/09D/wcA4wcAxwAAqwAAjwAAcwAA//PfHRUh3gAAAAF0Uk5TAEDm2GYAAADxSURBVHjazdNRTsMwEEXR+5y2CbD/nVKS0IwfGGFNqzZC/CDy59yjiRXZ4odHfwty6T0gCQEB3gGDhLfSjB+Bo+Tm6qUQfgBOwgjEJwnfgxGwAEGN8C4QwjW2ayCMxlxJLq8k0Lj6ZoLYjgnQeKn5xQkoLnOAeg+HoXN4osyHFdR7PJ8xCV6Yj5pBvVOmJToYpsU+lPIGovW6AUIwsUwL2Byk4dwnTOEApK8ImEE3oHpDpglbRm5gdW7SNUCWDE2QoI/wt6gy2fM/VHA0YbInaCOAZhigZQwJ0OkdRhug1bsj17aPYP/Q6votvwH/4G5+AEtIfyHh01/DAAAAAElFTkSuQmCC';
-  const ICON_ZOOM_IN = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAEJQTFRFAAAAFyMj//uP//Nf///DP1NTW3Nzb4OD/+cvg5eXt8PD7/Pz88sbn6+v16cTv4sPp28Hj1MHXysAIzMzS2NjL0NDdDvM6gAAAAF0Uk5TAEDm2GYAAAD6SURBVHjazdJdT4MwGIbh5255yzq+hrD//wM90hg3HFDjTBYDOE882MVJE+6+TZPqAbBcp18Drp/mReJv/71z3oPCpC1kFqKZxWA7No7Ak4FOyj7y2Q9pY3/cF9GXO5NyK9GN09UMpDHqMkoD0iIAn3M5jd9r/FCxnMCbprw4yYqqrs8/R2S6QufoFJU5QLAMSCpAmuUQSusJqZzepdrNL3bRbtQSPuyrSNPU7GMMh/U1LfkpE8LI5oRW2FkVadsDVW4t3WYRIhCDtdBvFqWFPFhzgD4vuq33UDiJVz25l3xonrXGF0ldb8cO3cERenQPcPyHAv1R6FF8AhbJLhhGVO4aAAAAAElFTkSuQmCC';
-  const ICON_ZOOM_OUT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAD9QTFRFAAAAFyMj///D//uPS2Njb4ODg5eX//Nfn6+vt8PD09vb7/Pz/+cv88sb16cTv4sPp28Hdz8AL0NDW3NzP1NTB/dKQgAAAAF0Uk5TAEDm2GYAAADnSURBVHjazZLLTsMwFETnONdpHi2FtP//hWwQCNoo5JJEIUJOKBsWPbOxNKMjW7LuANKz/zpgivpkki09hBAQsd80QCBDrk/PWk8NU28WAF2tHxwpQ11UdVVqJLc9WgjLBPcPjbSs7gAhhrbTzK4r3zwxcFGf12HI/nC4/lTYt+hSomoIIEgHuCqQHI3xtcGL/l0T1mnXKYUszm9UVRTxuH6muVNOPfSOVrCz2VDm9kizuYgaiUPPaXOxt5hHezgOfV43W/+hRuJVT+HFuuOz1jAiqTnZuUE34AwndAvg/A8L9MdC98IX3CQsGlCT6RUAAAAASUVORK5CYII=';
-  const ICON_PREVIOUS = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAARpQTFRFAAAAi99zN58XW78/Uqw5Uao4Wbs+fcxn////6+zrY69PXsBCbMZTi9J37Ozsc7Rgc8hb4ePg5ubm/Pz84+Pj39/fUak4XbRGd71k/v7+9vf29fb1gM1q3uLd6erp7e3tcq9ha75UWr0/VK86fb9q9vb15ufmXaFKZcNKXL9BcbNe5+nmVaFAhc9w4+fi2traZ7RRbsZVWKlDhbh20NTPU6866OznYqtN6urqP4UsTJ80o9uT1dXVsbGxQ44vTaE1V7g9Y8JId8pfk9SB+vr6ycrJUZo85eblRHw0R5QxWLg9Y8JJhM9v+Pj3zc3Nubm5XqhI9/j2UIVBQootWLk9fMxlk9WBVLE68PDwkMSB7vLtablTR68nb89Xd3lGMgAAAAF0Uk5TAEDm2GYAAAEkSURBVHjardM/S8NgEMfx5xtSKUmL6OIfRAQR0UEDdpR2rZPi5uDbUwdBUEFEnESnKjgUNYMguigEnVK1JPV5EgfBe5qlWX7k8iEcxx2q4KEYgB2lpP+BeSWxAxdjvmygDF2lhkg6FlCFWCkfiCRQrvBhcgReexKYgDeTY8CTAGbgWYe1Sfc3p4FQAM7cY16d5U4a1CIvscl5+AwFsEw7678yzI046pX776z/8XZHiaCUVwJoJSJwa9em4i/wEIlAed28VnPgQgJ1uDS5ehtwrrPPoBrAqQSavI+emX94cCTvw1rpJMtgEg4k0PQ4NOlPVcNIXpjGVZ5qfV8G9daSnscGx3Hfpd1kT/0Bztau7SycngZqeye1AP1dYdJ+WYW3OQjwA+U4biEmzoW0AAAAAElFTkSuQmCC';
-  const ICON_NEXT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAARpQTFRFAAAAi99zN58XW78/Wbs+Uao4Uqw5Y69P6+zr////fcxnbMZTc7Rg7Ozsi9J3XsBCUak439/f4+Pj/Pz85ubm4ePgc8hb9fb19vf2/v7+d71kXbRGWr0/a75Ucq9h7e3t6erp3uLdgM1q9vb1fb9qVK86XL9BZcNKXaFK5ufmVaFA5+nmcbNebsZVZ7RR2tra4+fihc9wU6860NTPhbh2WKlDYqtN6OznTJ80P4Us6urqsbGx1dXVo9uTV7g9TaE1Q44vUZo8ycrJ+vr6k9SBd8pfY8JIWLg9R5QxRHw05eblXqhIubm5zc3N+Pj3hM9vY8JJWLk9QootUIVB9/j2k9WBfMxlVLE6kMSB8PDwablT7vLtR68nb89XrxDnFwAAAAF0Uk5TAEDm2GYAAAEeSURBVHjardMxSwNBEIbheWOCgSNFbESxSyF4giBXCIqVgqhYCWLh39NOxNhGOytj0Ea0CAqCGBAPPA8uJqdZN0Ugs7km0+wH+ywMywySUWQDcKOUdACYk+4IkMeIxAmK0BEpdPORDkpALOLBhw4myhCaUCaKNDADtEyYhhd3k6ZmoamCCvBsI4kGROZp9u1jqoLKJDyZ4M1xrwGRJcI4NMHnVgVS9N9b/x0v3KiAABo2tlVQ8nmITQjqiQJWoVO3sfAtClinsXxtJbVhsAFcjfqoLYjN+83PKarDYA/ebP87PxfqPCx+vcYm7NKuamD/XGytXTpGztvmTCS4W6k5gBxwqg9t7vDEtRa53x6Qo+PUAXr3gjndm5W5m+MAf+hrdiHa73zsAAAAAElFTkSuQmCC';
-  const FAVICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNjQwIj48c3R5bGU+LmZ7ZmlsbDojMzM4MDAwfUBtZWRpYShwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuZntmaWxsOiM5OUZGNTV9fTwvc3R5bGU+PHBhdGggb3BhY2l0eT0iLjQiIGQ9Ik02NCAyNzJDNjQgMjEwLjEgMTE0LjIgMTYwIDE3NiAxNjBMMTc2IDU0NEw2NCA1NDRMNjQgMjcyek0yMDggMTYzLjRDMjM3LjYgMTcwLjkgMjYzLjQgMTkwLjIgMjc4LjYgMjE3LjZMMzA0IDI2My4zTDMwNCA1NDRMMjA4IDU0NEwyMDggMTYzLjR6TTMzNiAzMjAuOUwzNzAuNCAzODIuN0MzODQuNCA0MDcuOSA0MDYuMyA0MjcuMiA0MzIgNDM4TDQzMiA1NDMuOUwzMzYgNTQzLjlMMzM2IDMyMC44ek00NjQgNDQ2LjhDNDY5LjcgNDQ3LjYgNDc1LjQgNDQ4IDQ4MS4yIDQ0OEM1MTguOSA0NDggNTUyLjggNDMxLjUgNTc2IDQwNS40TDU3NiA1NDRMNDY0IDU0NEw0NjQgNDQ2Ljh6IiBjbGFzcz0iZiIvPjxwYXRoIGQ9Ik0xNzYgMTYwQzExNC4yIDE2MCA2NCAyMTAuMSA2NCAyNzJMNjQgNTQ0TDMyIDU0NEwzMiAyNzJDMzIgMTkyLjUgOTYuNSAxMjggMTc2IDEyOEwxODAuNyAxMjhDMjMzIDEyOCAyODEuMiAxNTYuNCAzMDYuNiAyMDIuMUwzOTguNCAzNjcuM0M0MTUuMSAzOTcuNCA0NDYuOCA0MTYuMSA0ODEuMyA0MTYuMUM1OTYuNyA0MTYuMSA2MTEgMjQxLjggNDk2LjEgMjI1LjFMNDk2LjEgMzY1LjdDNDkxLjQgMzY3LjMgNDg2LjUgMzY4LjEgNDgxLjMgMzY4LjFDNDc1LjMgMzY4LjEgNDY5LjUgMzY3IDQ2NC4xIDM2NC44TDQ2NC4xIDIyNS45QzQ0Ny42IDIyOS4yIDQzMi4xIDIzNi45IDQxOS41IDI0OC40TDQwNi45IDI1OS45TDM4NS40IDIzNi4yTDM5OCAyMjQuN0M0MjEuMSAyMDMuNyA0NTEuMyAxOTIgNDgyLjUgMTkyQzU1MS45IDE5MiA2MDguMSAyNDguMiA2MDguMSAzMTcuNkw2MDguMSA1NDRMNTc2LjEgNTQ0TDU3Ni4xIDQwNS40QzU1Mi45IDQzMS41IDUxOSA0NDggNDgxLjMgNDQ4QzQ3NS41IDQ0OCA0NjkuOCA0NDcuNiA0NjQuMSA0NDYuOEw0NjQuMSA1NDRMNDMyLjEgNTQ0TDQzMi4xIDQzOC4xQzQwNi40IDQyNy4zIDM4NC41IDQwOCAzNzAuNSAzODIuOEwzMzYuMSAzMjFMMzM2LjEgNTQ0LjFMMzA0LjEgNTQ0LjFMMzA0LjEgMjYzLjRMMjc4LjcgMjE3LjdDMjYzLjUgMTkwLjMgMjM3LjcgMTcwLjkgMjA4LjEgMTYzLjVMMjA4LjEgNTQ0LjFMMTc2LjEgNTQ0LjFMMTc2LjEgMTYwLjF6IiBjbGFzcz0iZiIvPjwvc3ZnPgo=';
-  const FONT_RCT2 = 'data:font/woff2;base64,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';
 
   // Always show snapshot label; prev/next only when multiple snapshots
 
@@ -625,9 +626,11 @@ function generateHtml(manifest: TimelineManifest): string {
 <meta name="description" content="OpenRCT2 Online Map">
 <meta property="og:type" content="website">
 <meta property="og:title" content="${escLabel}">
-<meta property="og:description" content="OpenRCT2 Online Map">
-<meta property="og:image" content="og-image.png">
-<meta name="twitter:card" content="summary_large_image">
+<meta property="og:description" content="OpenRCT2 Online Map">${baseUrl ? `
+<base href="${baseUrl}">
+<meta property="og:url" content="${baseUrl}">
+<meta property="og:image" content="${baseUrl}og-image.png">
+<meta name="twitter:card" content="summary_large_image">` : ""}
 <title>${lastLabel}</title>
 <link rel="icon" href="${FAVICON}">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -782,6 +785,17 @@ function generateHtml(manifest: TimelineManifest): string {
 
   var tileLayers = getLayersForTimestamp(currentTimestamp);
   tileLayers[currentRotation].addTo(map);
+
+  function rotateView() {
+    var idx = CONFIG.rotations.indexOf(currentRotation);
+    var nextIdx = (idx + 1) % CONFIG.rotations.length;
+    var nextRot = CONFIG.rotations[nextIdx];
+    map.removeLayer(tileLayers[currentRotation]);
+    currentRotation = nextRot;
+    tileLayers = getLayersForTimestamp(currentTimestamp);
+    tileLayers[currentRotation].addTo(map);
+    updateHash();
+  }
   if (initLat !== undefined && initLng !== undefined && initZoom !== undefined && !isNaN(initLat) && !isNaN(initLng) && !isNaN(initZoom)) {
     map.setView(L.latLng(initLat, initLng), initZoom);
   } else {
@@ -805,16 +819,7 @@ function generateHtml(manifest: TimelineManifest): string {
       btn.innerHTML = '<img src="' + ICON_ROTATE + '" alt="Rotate">';
       btn.title = 'Rotate view';
       btn.setAttribute('aria-label', 'Rotate view');
-      L.DomEvent.on(btn, 'click', function() {
-        var idx = CONFIG.rotations.indexOf(currentRotation);
-        var nextIdx = (idx + 1) % CONFIG.rotations.length;
-        var nextRot = CONFIG.rotations[nextIdx];
-        map.removeLayer(tileLayers[currentRotation]);
-        currentRotation = nextRot;
-        tileLayers = getLayersForTimestamp(currentTimestamp);
-        tileLayers[currentRotation].addTo(map);
-        updateHash();
-      });
+      L.DomEvent.on(btn, 'click', rotateView);
       return container;
     },
   });
@@ -891,16 +896,7 @@ ${hasTimeline ? `
     switch (e.key) {
       case 'r':
       case 'R':
-        if (CONFIG.rotations.length > 1) {
-          var idx = CONFIG.rotations.indexOf(currentRotation);
-          var nextIdx = (idx + 1) % CONFIG.rotations.length;
-          var nextRot = CONFIG.rotations[nextIdx];
-          map.removeLayer(tileLayers[currentRotation]);
-          currentRotation = nextRot;
-          tileLayers = getLayersForTimestamp(currentTimestamp);
-          tileLayers[currentRotation].addTo(map);
-          updateHash();
-        }
+        if (CONFIG.rotations.length > 1) rotateView();
         break;
       case 'ArrowLeft':
         if (typeof switchToTimepoint === 'function' && currentIdx > 0) {
@@ -937,8 +933,8 @@ async function main() {
 
   // Handle --list mode
   if (listSnapshots) {
-    const manifest = readManifest(outputDir);
-    if (!manifest || manifest.timePoints.length === 0) {
+    const manifest = requireManifest(outputDir);
+    if (manifest.timePoints.length === 0) {
       console.error("No snapshots found in output directory.");
       process.exit(1);
     }
@@ -950,11 +946,7 @@ async function main() {
 
   // Handle --rename mode
   if (renameTimestamp) {
-    const manifest = readManifest(outputDir);
-    if (!manifest) {
-      console.error("Error: No timeline.json found in output directory.");
-      process.exit(1);
-    }
+    const manifest = requireManifest(outputDir);
     const tp = manifest.timePoints.find(tp => tp.timestamp === renameTimestamp);
     if (!tp) {
       console.error(`Error: Snapshot '${renameTimestamp}' not found in timeline.`);
@@ -967,14 +959,14 @@ async function main() {
     }
     tp.label = snapshotLabel;
     writeManifest(outputDir, manifest);
-    fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest));
+    fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain));
     console.error(`Renamed snapshot '${renameTimestamp}' to '${snapshotLabel}'.`);
     return;
   }
 
   // Handle --remove mode
   if (removeTimestamp) {
-    removeSnapshot(outputDir, removeTimestamp);
+    removeSnapshot(outputDir, removeTimestamp, domain);
     return;
   }
 
@@ -1006,86 +998,86 @@ async function main() {
     giantPngs.push({ rotation: rot, path: pngPath });
   }
 
-  // Compare hash against previous snapshot
-  const snapshotHash = computeSnapshotHash(giantPngs.map(g => g.path));
-  if (!forceSnapshot && manifest && manifest.timePoints.length > 0) {
-    const lastHash = manifest.timePoints[manifest.timePoints.length - 1].hash;
-    if (lastHash && lastHash === snapshotHash) {
-      console.error("\nMap unchanged since last snapshot — skipping. Use --force to save anyway.");
-      for (const { path: pngPath } of giantPngs) {
-        fs.unlinkSync(pngPath);
+  try {
+    // Compare hash against previous snapshot
+    const snapshotHash = computeSnapshotHash(giantPngs.map(g => g.path));
+    if (!forceSnapshot && manifest && manifest.timePoints.length > 0) {
+      const lastHash = manifest.timePoints[manifest.timePoints.length - 1].hash;
+      if (lastHash && lastHash === snapshotHash) {
+        console.error("\nMap unchanged since last snapshot — skipping. Use --force to save anyway.");
+        fs.rmSync(snapshotDir, { recursive: true, force: true });
+        return;
       }
-      fs.rmSync(snapshotDir, { recursive: true, force: true });
-      fs.rmSync(tmpConfigDir, { recursive: true, force: true });
-      return;
     }
-  }
 
-  // Generate tile pyramids into snapshot directory
-  console.error("\nGenerating tile pyramids...");
-  const metadataList: TileMetadata[] = [];
-  for (const { rotation, path: pngPath } of giantPngs) {
-    const meta = await generateTiles(pngPath, rotation, snapshotDir);
-    metadataList.push(meta);
-    console.error(
-      `  -> rotation ${rotation}: ${meta.maxZoom + 1} zoom levels`,
-    );
-  }
-
-  // Deduplicate tiles against the previous snapshot
-  if (manifest && manifest.timePoints.length > 0) {
-    const prevTimestamp = manifest.timePoints[manifest.timePoints.length - 1].timestamp;
-    const prevSnapshotDir = path.join(outputDir, "snapshots", prevTimestamp);
-    if (fs.existsSync(prevSnapshotDir)) {
-      console.error("\nDeduplicating tiles...");
-      const { total, deduped } = deduplicateSnapshot(snapshotDir, prevSnapshotDir);
-      const pct = total > 0 ? ((deduped / total) * 100).toFixed(1) : "0";
-      console.error(`  ${deduped}/${total} tiles symlinked (${pct}% saved)`);
+    // Generate tile pyramids into snapshot directory
+    console.error("\nGenerating tile pyramids...");
+    const metadataList: TileMetadata[] = [];
+    for (const { rotation, path: pngPath } of giantPngs) {
+      const meta = await generateTiles(pngPath, rotation, snapshotDir);
+      metadataList.push(meta);
+      console.error(
+        `  -> rotation ${rotation}: ${meta.maxZoom + 1} zoom levels`,
+      );
     }
+
+    // Deduplicate tiles against the previous snapshot
+    if (manifest && manifest.timePoints.length > 0) {
+      const prevTimestamp = manifest.timePoints[manifest.timePoints.length - 1].timestamp;
+      const prevSnapshotDir = path.join(outputDir, "snapshots", prevTimestamp);
+      if (fs.existsSync(prevSnapshotDir)) {
+        console.error("\nDeduplicating tiles...");
+        const { total, deduped } = deduplicateSnapshot(snapshotDir, prevSnapshotDir);
+        const pct = total > 0 ? ((deduped / total) * 100).toFixed(1) : "0";
+        console.error(`  ${deduped}/${total} tiles symlinked (${pct}% saved)`);
+      }
+    }
+
+    // Update manifest
+    const existingPoints = manifest?.timePoints ?? [];
+    manifest = {
+      timePoints: [...existingPoints, { timestamp, label: snapshotLabel, hash: snapshotHash }],
+      rotations,
+      maxZoom: metadataList[0].maxZoom,
+      imageWidth: metadataList[0].width,
+      imageHeight: metadataList[0].height,
+      tileSize,
+    };
+    writeManifest(outputDir, manifest);
+
+    // Generate OG preview image only when --domain is set (crawlers need absolute URLs)
+    if (domain) {
+      // 2:1 downscale (crop 2400x1260, halve to 1200x630); fall back to 1:1 for small images
+      const ogPath = path.join(outputDir, "og-image.png");
+      const ogMeta = await sharp(giantPngs[0].path).metadata();
+      const use2x = ogMeta.width! >= 2400 && ogMeta.height! >= 1260;
+      const ogCropW = Math.min(use2x ? 2400 : 1200, ogMeta.width!);
+      const ogCropH = Math.min(use2x ? 1260 : 630, ogMeta.height!);
+      let ogPipeline = sharp(giantPngs[0].path)
+        .extract({
+          left: Math.floor((ogMeta.width! - ogCropW) / 2),
+          top: Math.floor((ogMeta.height! - ogCropH) / 2),
+          width: ogCropW,
+          height: ogCropH,
+        });
+      if (use2x) {
+        ogPipeline = ogPipeline.resize(ogCropW / 2, ogCropH / 2, { kernel: "nearest" });
+      }
+      await ogPipeline.png({ compressionLevel: 6 }).toFile(ogPath);
+      console.error(`OG image written to ${ogPath}`);
+    }
+
+    // Generate HTML viewer
+    const htmlPath = path.join(outputDir, "index.html");
+    fs.writeFileSync(htmlPath, generateHtml(manifest, domain));
+    console.error(`Viewer written to ${htmlPath}`);
+  } finally {
+    // Clean up giant PNGs and temp config
+    for (const { path: pngPath } of giantPngs) {
+      try { fs.unlinkSync(pngPath); } catch {}
+    }
+    if (tmpConfigDir) fs.rmSync(tmpConfigDir, { recursive: true, force: true });
   }
-
-  // Update manifest
-  const existingPoints = manifest?.timePoints ?? [];
-  manifest = {
-    timePoints: [...existingPoints, { timestamp, label: snapshotLabel, hash: snapshotHash }],
-    rotations,
-    maxZoom: metadataList[0].maxZoom,
-    imageWidth: metadataList[0].width,
-    imageHeight: metadataList[0].height,
-    tileSize,
-  };
-  writeManifest(outputDir, manifest);
-
-  // Generate OG preview image from first rotation's giant screenshot
-  // 2:1 downscale (crop 2400x1260, halve to 1200x630); fall back to 1:1 for small images
-  const ogPath = path.join(outputDir, "og-image.png");
-  const ogMeta = await sharp(giantPngs[0].path).metadata();
-  const use2x = ogMeta.width! >= 2400 && ogMeta.height! >= 1260;
-  const ogCropW = Math.min(use2x ? 2400 : 1200, ogMeta.width!);
-  const ogCropH = Math.min(use2x ? 1260 : 630, ogMeta.height!);
-  let ogPipeline = sharp(giantPngs[0].path)
-    .extract({
-      left: Math.floor((ogMeta.width! - ogCropW) / 2),
-      top: Math.floor((ogMeta.height! - ogCropH) / 2),
-      width: ogCropW,
-      height: ogCropH,
-    });
-  if (use2x) {
-    ogPipeline = ogPipeline.resize(ogCropW / 2, ogCropH / 2, { kernel: "nearest" });
-  }
-  await ogPipeline.png({ compressionLevel: 6 }).toFile(ogPath);
-  console.error(`OG image written to ${ogPath}`);
-
-  // Generate HTML viewer
-  const htmlPath = path.join(outputDir, "index.html");
-  fs.writeFileSync(htmlPath, generateHtml(manifest));
-  console.error(`Viewer written to ${htmlPath}`);
-
-  // Clean up giant PNGs and temp config
-  for (const { path: pngPath } of giantPngs) {
-    fs.unlinkSync(pngPath);
-  }
-  fs.rmSync(tmpConfigDir, { recursive: true, force: true });
 
 }
 

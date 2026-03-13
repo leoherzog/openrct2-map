@@ -82,6 +82,7 @@ Options:
   --palette                Use indexed-color PNG (smaller files for pixel art)
   --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
+  --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
 
 Screenshot defaults (applied unless you override that specific flag after --):

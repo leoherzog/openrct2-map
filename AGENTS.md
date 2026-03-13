@@ -137,6 +137,7 @@ Generated output:
 ```
 <output-dir>/
   index.html                 # Self-contained viewer (inline CSS/JS, Leaflet from CDN)
+  og-image.png               # OG preview image (only generated when --domain is set)
   timeline.json              # Manifest of all snapshots
   snapshots/
     <timestamp>/             # e.g. 20260312-143022
@@ -171,6 +172,7 @@ deno run -A main.ts <savefile> \
 --palette                        # indexed-color PNG (smaller for pixel art)
 --skip-blanks 10                 # alpha threshold for blank tiles (default: -1)
 --concurrency 2                  # libvips thread count (default: CPU cores)
+--domain https://example.com/map # base URL for OG meta tags and og-image.png
 
 # List all snapshots
 deno run -A main.ts --list -o ./output
@@ -276,3 +278,12 @@ The viewer persists map state in the URL hash fragment (`#z=3&lat=-5.00&lng=4.00
 ### Rotation button
 
 The rotate button is hidden when `CONFIG.rotations` has only one entry (e.g. `--rotations 0`). Since rotations are per-output-directory (stored in `timeline.json`), this applies to all snapshots in the timeline.
+
+### OpenGraph / social preview (`--domain`)
+
+Social media crawlers (Facebook, Twitter/X, Discord, Slack, iMessage) do **not** execute JavaScript — they parse raw HTML only. This means `og:image` must use an absolute URL to work.
+
+The `--domain <url>` flag controls OG tag generation:
+
+- **Without `--domain`:** Only basic meta tags are emitted (`og:type`, `og:title`, `og:description`). No `og:image`, `og:url`, `twitter:card`, or `<base>` tag. No `og-image.png` is generated. This avoids emitting broken relative URLs.
+- **With `--domain`:** The generated HTML includes `<base href>`, `<meta property="og:url">`, `<meta property="og:image">` (absolute URL), and `<meta name="twitter:card">`. An `og-image.png` (1200x630, cropped from center of first rotation) is generated in the output directory.
