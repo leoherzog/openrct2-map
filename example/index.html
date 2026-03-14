@@ -196,10 +196,26 @@
     var idx = CONFIG.rotations.indexOf(currentRotation);
     var nextIdx = (idx + 1) % CONFIG.rotations.length;
     var nextRot = CONFIG.rotations[nextIdx];
+
+    // Current timepoint's CRS dimensions (not global max)
+    var tp = CONFIG.timePoints[currentIdx];
+    var tpZ = tp.maxZoom !== undefined ? tp.maxZoom : maxZoom;
+    var tpS = Math.pow(2, tpZ);
+    var tpW = (tp.imageWidth !== undefined ? tp.imageWidth : CONFIG.imageWidth) / tpS;
+    var tpH = (tp.imageHeight !== undefined ? tp.imageHeight : CONFIG.imageHeight) / tpS;
+
+    // Transform view center for isometric 90° rotation
+    var center = map.getCenter();
+    var fx = center.lng / tpW;    // 0..1 across width
+    var fy = -center.lat / tpH;   // 0..1 down height
+    var newFx = 1 - fy;
+    var newFy = fx;
+
     map.removeLayer(tileLayers[currentRotation]);
     currentRotation = nextRot;
     tileLayers = getLayersForTimestamp(currentTimestamp);
     tileLayers[currentRotation].addTo(map);
+    map.setView(L.latLng(-newFy * tpH, newFx * tpW), map.getZoom());
     updateHash();
   }
   if (initLat !== undefined && initLng !== undefined && initZoom !== undefined && !isNaN(initLat) && !isNaN(initLng) && !isNaN(initZoom)) {
