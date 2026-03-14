@@ -936,7 +936,7 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
   } else {
     map.fitBounds(bounds);
   }
-  map.setMaxBounds(bounds.pad(0.5));
+  map.setMaxBounds(bounds.pad(0.1));
 
   var ICON_ROTATE = '${ICON_ROTATE}';
   var ICON_ZOOM_IN = '${ICON_ZOOM_IN}';
