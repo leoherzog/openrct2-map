@@ -271,6 +271,16 @@ Key invariants:
 
 This ensures no dangling symlinks after removal.
 
+### Stale artifact cleanup
+
+At the start of every run, `cleanupStaleArtifacts()` scans the output directory for leftovers from crashed or killed previous runs:
+
+1. **Giant PNGs** (`giant_r*_z*.png` in output dir) — intermediate screenshots that should never persist
+2. **Temp tile dirs** (`.tmp-nz-*` inside any snapshot dir) — intermediate dirs from native zoom assembly
+3. **Orphaned snapshots** (dirs under `snapshots/` not referenced in `timeline.json`) — partially-tiled snapshots from runs that crashed before writing the manifest
+
+Orphaned snapshot removal follows the same safety protocol as `--remove`: symlinks in other snapshots that resolve into the orphan are materialized before deletion. This is defensive — in practice, symlinks are only created after successful tiling, so orphans from crashed runs are unlikely to be symlink targets.
+
 ### Legacy migration
 
 If the output directory contains `tiles/` but no `timeline.json` (pre-timeline format), the tool auto-migrates: `tiles/` is moved to `snapshots/migrated/` and a single-entry manifest is created.

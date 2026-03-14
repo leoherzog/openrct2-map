@@ -344,6 +344,59 @@ function removeSnapshot(outputDir: string, timestamp: string, domain?: string): 
 }
 
 // ---------------------------------------------------------------------------
+// Stale artifact cleanup
+// ---------------------------------------------------------------------------
+
+function cleanupStaleArtifacts(outputDir: string): void {
+  if (!fs.existsSync(outputDir)) return;
+
+  // 1. Giant PNGs left by crashed screenshot phase
+  for (const entry of fs.readdirSync(outputDir)) {
+    if (/^giant_r\d+_z\d+\.png$/.test(entry)) {
+      fs.unlinkSync(path.join(outputDir, entry));
+      console.error(`Cleaned up stale screenshot: ${entry}`);
+    }
+  }
+
+  const snapshotsDir = path.join(outputDir, "snapshots");
+  if (!fs.existsSync(snapshotsDir)) return;
+
+  // 2. .tmp-nz-* dirs left by crashed native zoom assembly
+  for (const snapshotName of fs.readdirSync(snapshotsDir)) {
+    const snapshotPath = path.join(snapshotsDir, snapshotName);
+    if (!fs.statSync(snapshotPath).isDirectory()) continue;
+    for (const entry of fs.readdirSync(snapshotPath)) {
+      if (entry.startsWith(".tmp-nz-")) {
+        fs.rmSync(path.join(snapshotPath, entry), { recursive: true, force: true });
+        console.error(`Cleaned up stale temp dir: snapshots/${snapshotName}/${entry}`);
+      }
+    }
+  }
+
+  // 3. Orphaned snapshot dirs (on disk but not in timeline.json)
+  const manifest = readManifest(outputDir);
+  const knownTimestamps = new Set(manifest?.timePoints.map(tp => tp.timestamp) ?? []);
+  for (const dirName of fs.readdirSync(snapshotsDir)) {
+    const dirPath = path.join(snapshotsDir, dirName);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+    if (knownTimestamps.has(dirName)) continue;
+
+    // Materialize symlinks in other snapshots that point into the orphan
+    const orphanReal = fs.realpathSync(dirPath);
+    for (const otherDir of fs.readdirSync(snapshotsDir)) {
+      if (otherDir === dirName) continue;
+      const otherPath = path.join(snapshotsDir, otherDir);
+      if (fs.statSync(otherPath).isDirectory()) {
+        materializeSymlinksPointingTo(otherPath, orphanReal);
+      }
+    }
+
+    fs.rmSync(dirPath, { recursive: true, force: true });
+    console.error(`Cleaned up orphaned snapshot: ${dirName}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -1012,6 +1065,7 @@ function computeSnapshotHash(pngPaths: string[]): string {
 
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
+  cleanupStaleArtifacts(outputDir);
 
   // Handle --list mode
   if (listSnapshots) {
