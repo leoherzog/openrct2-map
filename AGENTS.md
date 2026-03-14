@@ -91,6 +91,20 @@ Chain `.png()` before `.tile()` to ensure PNG output with alpha channel. Without
 - **`--tile-size`** — stored in `timeline.json` as `tileSize` and read by the Leaflet viewer. Changing tile size on an existing output directory will cause a mismatch with older snapshots.
 - **`--skip-blanks`** — `-1` means only fully transparent tiles are skipped. Higher values (0-255) set an alpha threshold below which tiles are considered blank.
 - **`--concurrency`** — maps to `sharp.concurrency(n)`. Set to 1 on memory-constrained systems.
+- **`--single-zoom`** — disables native zoom pyramid. Only renders at the specified `--zoom` level and lets Sharp downscale all lower zoom levels. Faster but blurrier zoomed-out tiles.
+
+### Native zoom pyramid (default)
+
+By default, the tool renders at multiple OpenRCT2 zoom levels (from `--zoom N` through zoom 3) and stitches their native-resolution tiles into the Leaflet tile pyramid. This means each zoom band in the viewer uses RCT2's dedicated pixel-art sprites for that scale, rather than bilinear-downscaled tiles from a single high-res render.
+
+**How it works:** OpenRCT2 zoom levels 0-3 each produce images at exactly 2× scale differences. When Sharp tiles each image, the maxZoom differs by exactly 1 between consecutive zoom levels, and the tile grids (z/y/x coordinates) align perfectly.
+
+Assembly strategy for `--zoom 1` (default, ozRange=[1,2,3]):
+1. Tile OZ3 (most zoomed out) → full pyramid z=0 through z=maxZoom₃ (base + downscales)
+2. Tile OZ2 → take only z=maxZoom₂ (native tiles) → replace downscaled version in output
+3. Tile OZ1 → take only z=maxZoom₁ (native tiles) → replace downscaled version in output
+
+Performance: ~30% more screenshot and tiling time vs single-zoom. The extra OZ renders are fast (smaller images).
 
 ## Leaflet Coordinate System
 
@@ -161,7 +175,8 @@ deno run -A main.ts <savefile> \
   -- --weather=3 --no-peeps
 
 # Other flags
---zoom 1                         # OpenRCT2 zoom level (default: 1)
+--zoom 1                         # finest zoom level (default: 1); also renders 2,3 for native sprites
+--single-zoom                    # only render at the specified zoom (skip native zoom pyramid)
 --rotations 0,1,2,3              # which rotations to render
 --label "March update"           # custom snapshot label (default: locale date/time)
 --clear                          # clear all existing snapshots before generating

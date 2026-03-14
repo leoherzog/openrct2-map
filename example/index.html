@@ -9,7 +9,6 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290 (Example 2)">
 <meta property="og:description" content="OpenRCT2 Online Map">
-<base href="https://leoherzog.github.io/openrct2-map/">
 <meta property="og:url" content="https://leoherzog.github.io/openrct2-map/">
 <meta property="og:image" content="https://leoherzog.github.io/openrct2-map/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -27,6 +26,7 @@
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body, #map { width: 100%; height: 100vh; background: #0d0d0d; position: relative; }
+  .leaflet-tile { image-rendering: pixelated; }
 
   .rct2-control {
     display: flex;
@@ -83,7 +83,7 @@
 </figure>
 <script>
 (function() {
-  var CONFIG = {"timePoints":[{"timestamp":"20260313-133225","label":"Tranquility Park by Mulpje — https://rctgo.com/downloads/view/tranquility-park.19354 (Example 1)","hash":"cb93886a4be362793c53cead9573baba1715e6e614ec6c496f627af4d17802c1","maxZoom":5,"imageWidth":8128,"imageHeight":4300},{"timestamp":"20260313-133304","label":"Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290 (Example 2)","hash":"479b0500c0ec02776ae2c0a277a165f861e1c8d8884e079d93f546875cc113f0","maxZoom":7,"imageWidth":19200,"imageHeight":9624}],"rotations":[0,1,2,3],"maxZoom":7,"imageWidth":19200,"imageHeight":9624,"tileSize":256};
+  var CONFIG = {"timePoints":[{"timestamp":"20260313-213318","label":"Tranquility Park by Mulpje — https://rctgo.com/downloads/view/tranquility-park.19354 (Example 1)","hash":"3ac552c4e7d8240e438eee2e8257e8944bf58f61b3db89aa62482ce349ddb286","maxZoom":5,"imageWidth":8128,"imageHeight":4300},{"timestamp":"20260313-213401","label":"Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290 (Example 2)","hash":"15b324dc373fed57d78308ae64545df4a9d07d95b7fe1f4b0ab89c1ba61f5304","maxZoom":7,"imageWidth":19200,"imageHeight":9624}],"rotations":[0,1,2,3],"maxZoom":7,"imageWidth":19200,"imageHeight":9624,"tileSize":256};
   var maxZoom = CONFIG.maxZoom;
 
   // Parse URL hash state

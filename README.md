@@ -68,7 +68,8 @@ Usage: main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
-  --zoom <n>               OpenRCT2 zoom level, 0 = closest (default: 1)
+  --zoom <n>               Finest OpenRCT2 zoom level, 0 = closest (default: 1)
+                           Renders at zoom n through 3 for native sprites at each level
   --rotations <list>       Comma-separated rotations to render (default: 0,1,2,3)
   --openrct2 <path>        Path to openrct2 binary/AppImage (default: auto-detect)
   --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [auto-detected]
@@ -85,6 +86,7 @@ Options:
   --palette                Use indexed-color PNG (smaller files for pixel art)
   --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
+  --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
 

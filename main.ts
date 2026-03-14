@@ -368,6 +368,7 @@ const { values, positionals } = parseArgs({
     palette: { type: "boolean", default: false },
     "skip-blanks": { type: "string", default: "-1" },
     concurrency: { type: "string" },
+    "single-zoom": { type: "boolean", default: false },
     domain: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -381,6 +382,7 @@ const renameTimestamp = values.rename as string | undefined;
 const removeTimestamp = values.remove as string | undefined;
 const clearSnapshots = values.clear as boolean;
 const forceSnapshot = values.force as boolean;
+const singleZoom = values["single-zoom"] as boolean;
 const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
 function requireInt(value: string, name: string): number {
   const n = parseInt(value, 10);
@@ -403,7 +405,8 @@ if (values.help || (positionals.length === 0 && !listSnapshots && !renameTimesta
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
-  --zoom <n>               OpenRCT2 zoom level, 0 = closest (default: 1)
+  --zoom <n>               Finest OpenRCT2 zoom level, 0 = closest (default: 1)
+                           Renders at zoom n through 3 for native sprites at each level
   --rotations <list>       Comma-separated rotations to render (default: 0,1,2,3)
   --openrct2 <path>        Path to openrct2 binary/AppImage (default: auto-detect)
   --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [auto-detected]
@@ -420,6 +423,7 @@ Options:
   --palette                Use indexed-color PNG (smaller files for pixel art)
   --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
+  --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
 
@@ -451,10 +455,17 @@ let rct1DataPath: string | undefined;
 let tmpConfigDir = "";
 let screenshotEnv: Record<string, string | undefined> = {};
 let extraFlags: string[] = [];
+let ozRange: number[] = [];
 
 if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
   inputFile = path.resolve(positionals[0]);
   zoomLevel = requireInt(values.zoom as string, "zoom");
+  if (zoomLevel < 0 || zoomLevel > 3) {
+    console.error("Error: --zoom must be between 0 and 3."); process.exit(1);
+  }
+  ozRange = singleZoom
+    ? [zoomLevel]
+    : Array.from({ length: 3 - zoomLevel + 1 }, (_, i) => zoomLevel + i);
   rct2DataPath = (values["rct2-data-path"] as string | undefined) ?? findRCT2Data();
   rct1DataPath = (values["rct1-data-path"] as string | undefined) ?? findRCT1Data();
 
@@ -506,22 +517,25 @@ if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
 // Screenshot generation
 // ---------------------------------------------------------------------------
 
+let screenshotCounter = 0;
+
 async function generateScreenshot(
   rotation: number,
+  zoom: number,
 ): Promise<string> {
-  const outPng = path.join(outputDir, `giant_r${rotation}.png`);
+  const outPng = path.join(outputDir, `giant_r${rotation}_z${zoom}.png`);
   const args = [
     "screenshot",
     inputFile,
     outPng,
     "giant",
-    String(zoomLevel),
+    String(zoom),
     String(rotation),
     ...extraFlags,
   ];
 
-  const idx = rotations.indexOf(rotation) + 1;
-  console.error(`[${idx}/${rotations.length}] openrct2 ${args.join(" ")}`);
+  const total = rotations.length * ozRange.length;
+  console.error(`[${++screenshotCounter}/${total}] openrct2 ${args.join(" ")}`);
 
   try {
     await execFile(openrct2Bin, args, { timeout: 600_000, env: screenshotEnv });
@@ -595,6 +609,47 @@ async function generateTiles(
   return { rotation, width, height, maxZoom };
 }
 
+async function assembleNativeTiles(
+  pngsForRotation: { zoom: number; path: string }[],
+  rotation: number,
+  targetBaseDir: string,
+): Promise<TileMetadata> {
+  // Sort by OZ level descending (most zoomed out first)
+  const sorted = [...pngsForRotation].sort((a, b) => b.zoom - a.zoom);
+
+  if (sorted.length === 1) {
+    return generateTiles(sorted[0].path, rotation, targetBaseDir);
+  }
+
+  // Base pyramid from most zoomed-out OZ (full pyramid including downscales)
+  const baseMeta = await generateTiles(sorted[0].path, rotation, targetBaseDir);
+  console.error(`    Base pyramid from OZ${sorted[0].zoom}: z=0-${baseMeta.maxZoom}`);
+
+  // Overlay native tiles from each closer OZ level
+  let finestMeta = baseMeta;
+  for (let i = 1; i < sorted.length; i++) {
+    const tempDir = fs.mkdtempSync(path.join(targetBaseDir, ".tmp-nz-"));
+    try {
+      const ozMeta = await generateTiles(sorted[i].path, rotation, tempDir);
+      const nativeZ = ozMeta.maxZoom;
+
+      const srcDir = path.join(tempDir, String(rotation), String(nativeZ));
+      const dstDir = path.join(targetBaseDir, String(rotation), String(nativeZ));
+
+      if (fs.existsSync(dstDir)) fs.rmSync(dstDir, { recursive: true });
+      fs.renameSync(srcDir, dstDir);
+
+      console.error(`    Native OZ${sorted[i].zoom} tiles at z=${nativeZ}`);
+      finestMeta = ozMeta;
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  // Use finest OZ dimensions — it defines the coordinate space for the viewer
+  return { rotation, width: finestMeta.width, height: finestMeta.height, maxZoom: finestMeta.maxZoom };
+}
+
 // ---------------------------------------------------------------------------
 // HTML generation — static asset data URIs
 // ---------------------------------------------------------------------------
@@ -630,7 +685,6 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
 <meta property="og:type" content="website">
 <meta property="og:title" content="${escLabel}">
 <meta property="og:description" content="OpenRCT2 Online Map">${baseUrl ? `
-<base href="${baseUrl}">
 <meta property="og:url" content="${baseUrl}">
 <meta property="og:image" content="${baseUrl}og-image.png">
 <meta name="twitter:card" content="summary_large_image">` : ""}
@@ -648,6 +702,7 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body, #map { width: 100%; height: 100vh; background: #0d0d0d; position: relative; }
+  .leaflet-tile { image-rendering: pixelated; }
 
   .rct2-control {
     display: flex;
@@ -1018,11 +1073,13 @@ async function main() {
   fs.mkdirSync(snapshotDir, { recursive: true });
 
   // Generate screenshots
-  console.error("Generating screenshots...");
-  const giantPngs: { rotation: number; path: string }[] = [];
+  console.error(`Generating screenshots (${ozRange.length > 1 ? `native zoom ${ozRange.join(",")}` : `zoom ${ozRange[0]}`})...`);
+  const giantPngs: { rotation: number; zoom: number; path: string }[] = [];
   for (const rot of rotations) {
-    const pngPath = await generateScreenshot(rot);
-    giantPngs.push({ rotation: rot, path: pngPath });
+    for (const oz of ozRange) {
+      const pngPath = await generateScreenshot(rot, oz);
+      giantPngs.push({ rotation: rot, zoom: oz, path: pngPath });
+    }
   }
 
   try {
@@ -1040,11 +1097,14 @@ async function main() {
     // Generate tile pyramids into snapshot directory
     console.error("\nGenerating tile pyramids...");
     const metadataList: TileMetadata[] = [];
-    for (const { rotation, path: pngPath } of giantPngs) {
-      const meta = await generateTiles(pngPath, rotation, snapshotDir);
+    for (const rot of rotations) {
+      const pngsForRot = giantPngs
+        .filter(g => g.rotation === rot)
+        .map(({ zoom, path }) => ({ zoom, path }));
+      const meta = await assembleNativeTiles(pngsForRot, rot, snapshotDir);
       metadataList.push(meta);
       console.error(
-        `  -> rotation ${rotation}: ${meta.maxZoom + 1} zoom levels`,
+        `  -> rotation ${rot}: z=0-${meta.maxZoom} (${meta.maxZoom + 1} zoom levels)`,
       );
     }
 
@@ -1086,13 +1146,15 @@ async function main() {
 
     // Generate OG preview image only when --domain is set (crawlers need absolute URLs)
     if (domain) {
+      // Use the finest zoom level at rotation 0 for best OG preview quality
+      const ogSource = giantPngs.find(g => g.rotation === rotations[0] && g.zoom === ozRange[0])!;
       // 2:1 downscale (crop 2400x1260, halve to 1200x630); fall back to 1:1 for small images
       const ogPath = path.join(outputDir, "og-image.png");
-      const ogMeta = await sharp(giantPngs[0].path).metadata();
+      const ogMeta = await sharp(ogSource.path).metadata();
       const use2x = ogMeta.width! >= 2400 && ogMeta.height! >= 1260;
       const ogCropW = Math.min(use2x ? 2400 : 1200, ogMeta.width!);
       const ogCropH = Math.min(use2x ? 1260 : 630, ogMeta.height!);
-      let ogPipeline = sharp(giantPngs[0].path)
+      let ogPipeline = sharp(ogSource.path)
         .extract({
           left: Math.floor((ogMeta.width! - ogCropW) / 2),
           top: Math.floor((ogMeta.height! - ogCropH) / 2),
