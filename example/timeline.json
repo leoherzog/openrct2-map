@@ -1,20 +1,20 @@
 {
   "timePoints": [
     {
-      "timestamp": "20260313-213318",
+      "timestamp": "20260313-215731",
       "label": "Tranquility Park by Mulpje — https://rctgo.com/downloads/view/tranquility-park.19354 (Example 1)",
-      "hash": "3ac552c4e7d8240e438eee2e8257e8944bf58f61b3db89aa62482ce349ddb286",
-      "maxZoom": 5,
-      "imageWidth": 8128,
-      "imageHeight": 4300
+      "hash": "0087218091ab008ce9e9e3d4867f1e158bf40a78f6997f7b064b44eff8c6fef7",
+      "maxZoom": 6,
+      "imageWidth": 16256,
+      "imageHeight": 8600
     },
     {
-      "timestamp": "20260313-213401",
-      "label": "Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290 (Example 2)",
-      "hash": "15b324dc373fed57d78308ae64545df4a9d07d95b7fe1f4b0ab89c1ba61f5304",
-      "maxZoom": 7,
-      "imageWidth": 19200,
-      "imageHeight": 9624
+      "timestamp": "20260313-220118",
+      "label": "Cedar Point by fidwell — https://rctgo.com/downloads/view/cedar-point.22290",
+      "hash": "c0fc379085bd1caad091d872394efdd7a6dd859492a92c4fd4effe1b05639145",
+      "maxZoom": 8,
+      "imageWidth": 38400,
+      "imageHeight": 19248
     }
   ],
   "rotations": [
@@ -23,8 +23,8 @@
     2,
     3
   ],
-  "maxZoom": 7,
-  "imageWidth": 19200,
-  "imageHeight": 9624,
+  "maxZoom": 8,
+  "imageWidth": 38400,
+  "imageHeight": 19248,
   "tileSize": 256
 }

@@ -573,7 +573,7 @@ async function generateTiles(
   rotation: number,
   targetBaseDir: string,
 ): Promise<TileMetadata> {
-  const meta = await sharp(giantPng).metadata();
+  const meta = await sharp(giantPng, { limitInputPixels: false }).metadata();
   const width = meta.width!;
   const height = meta.height!;
 
@@ -589,7 +589,7 @@ async function generateTiles(
     ...(pngEffort !== undefined && { effort: pngEffort }),
   };
 
-  await sharp(giantPng)
+  await sharp(giantPng, { limitInputPixels: false })
     .png(pngOpts)
     .tile({
       size: tileSize,
@@ -1150,11 +1150,11 @@ async function main() {
       const ogSource = giantPngs.find(g => g.rotation === rotations[0] && g.zoom === ozRange[0])!;
       // 2:1 downscale (crop 2400x1260, halve to 1200x630); fall back to 1:1 for small images
       const ogPath = path.join(outputDir, "og-image.png");
-      const ogMeta = await sharp(ogSource.path).metadata();
+      const ogMeta = await sharp(ogSource.path, { limitInputPixels: false }).metadata();
       const use2x = ogMeta.width! >= 2400 && ogMeta.height! >= 1260;
       const ogCropW = Math.min(use2x ? 2400 : 1200, ogMeta.width!);
       const ogCropH = Math.min(use2x ? 1260 : 630, ogMeta.height!);
-      let ogPipeline = sharp(ogSource.path)
+      let ogPipeline = sharp(ogSource.path, { limitInputPixels: false })
         .extract({
           left: Math.floor((ogMeta.width! - ogCropW) / 2),
           top: Math.floor((ogMeta.height! - ogCropH) / 2),
