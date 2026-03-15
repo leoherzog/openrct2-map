@@ -7,7 +7,8 @@
       "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/rotate.png)",
       "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/zoom-in.png)",
       "Bash(base64 -w0 /home/lu/Projects/openrct2-map/assets/zoom-out.png)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npx tsx:*)"
     ]
   }
 }

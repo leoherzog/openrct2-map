@@ -4,7 +4,7 @@ Generates a Leaflet-based tile map viewer from OpenRCT2 park saves — similar t
 
 ## Architecture
 
-Single-file tool: `main.ts` (~1000 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
+Single-file tool: `main.ts` (~1150 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
 
 **Pipeline:** CLI parse → screenshot (openrct2) → tile (sharp) → HTML generation
 
@@ -12,7 +12,7 @@ Single-file tool: `main.ts` (~1000 lines). No build step. Runs with `deno run -A
 
 - **Runtime:** Deno (primary) or Node 18+
 - **npm:** `sharp` (only dependency, mapped in `deno.json`)
-- **External:** OpenRCT2 binary/AppImage (auto-detected in cwd or via `--openrct2`)
+- **External:** OpenRCT2 binary/AppImage (auto-detected, auto-downloaded, or via `--openrct2`)
 - **Browser CDN:** Leaflet 1.x from jsDelivr (loaded by generated index.html)
 
 ## OpenRCT2 CLI Quirks
@@ -209,9 +209,16 @@ All three paths (binary, RCT2 data, RCT1 data) are auto-detected. CLI flags over
 **OpenRCT2 binary** (`findOpenRCT2()`, override: `--openrct2`):
 1. cwd: `OpenRCT2-*.AppImage`, `OpenRCT2-*.exe` (newest version first)
 2. Well-known paths: `C:\Program Files\OpenRCT2\openrct2.exe` (Windows), `/usr/bin/openrct2` (Linux), `/Applications/OpenRCT2.app/...` (macOS)
-3. PATH fallback: `openrct2`
+3. Extracted portable directories (Windows): `OpenRCT2-*-windows-portable*/openrct2.exe`
+4. PATH fallback: `openrct2`
 
-**RCT2 game data** (`findRCT2Data()`, override: `--rct2-data-path`), validated by `Data/g1.dat`:
+If no binary is found and `--openrct2` is not set, `downloadPortableOpenRCT2()` fetches the latest release from GitHub:
+- Linux: downloads the AppImage matching the CPU arch to cwd, makes it executable
+- Windows: downloads the portable zip, extracts via PowerShell `Expand-Archive`
+- macOS: not supported for auto-download
+- Already-downloaded files are detected by filename and skipped
+
+**RCT2 game data** (`findRCT2Data()`, override: `--rct2-data-path`; auto-downloaded if missing), validated by `Data/g1.dat`:
 1. `./assets/RCT` (local project setup)
 2. Steam: `Rollercoaster Tycoon 2`, `RollerCoaster Tycoon Classic`
 3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon 2 Triple Thrill Pack`
@@ -220,6 +227,8 @@ All three paths (binary, RCT2 data, RCT1 data) are auto-detected. CLI flags over
 1. `./assets/RCT` (same dir may contain both)
 2. Steam: `RollerCoaster Tycoon Deluxe`
 3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon Deluxe`
+
+If RCT2 data is not found locally and `--rct2-data-path` is not set, `downloadGameAssets()` fetches the archive from `archive.org/download/OpenRCT2Assets/RCT.zip` and extracts it to `./assets/RCT/`. Handles nested zip structure (moves contents up if the zip contains a `RCT/` subdirectory). Uses `unzip` on Linux/macOS and PowerShell `Expand-Archive` on Windows.
 
 Steam paths checked per platform:
 - Linux: `~/.local/share/Steam/steamapps/common/...`, `~/snap/steam/common/.local/share/Steam/steamapps/common/...`

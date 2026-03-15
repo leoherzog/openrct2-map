@@ -14,9 +14,11 @@ Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — l
 
 | Requirement | Notes |
 |---|---|
-| **OpenRCT2** | Binary, AppImage, or system install. Auto-detected or pass `--openrct2 <path>` |
-| **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | `Data/g1.dat` from a Steam/GOG install of the original RCT2 game, or placed in `./assets/RCT/` |
+| **OpenRCT2** | Auto-downloaded on first run, or pass `--openrct2 <path>` |
+| **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | Auto-downloaded on first run, or place in `./assets/RCT/` |
 | **Deno 1.40+** or **Node.js >=18.17** | Deno is primary; Node works via `npx tsx` |
+
+On first run, the tool will automatically download the latest OpenRCT2 portable binary (Linux/Windows) and RCT2 game assets if they aren't already present. Use `--openrct2` or `--rct2-data-path` to skip auto-download for that component.
 
 RCT1 data (`Data/csg1.dat`) is only required if your park uses RCT1 objects (rides, scenery, paths) or RCT1 scenarios.
 
@@ -89,6 +91,10 @@ Options:
   --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
+
+Auto-download: If no OpenRCT2 binary or game assets are found, the tool will
+  attempt to download them automatically (GitHub Releases / archive.org).
+  Use --openrct2 or --rct2-data-path to skip auto-download for that component.
 
 Screenshot defaults (applied unless you override that specific flag after --):
   --transparent, --tidy-up-park, --weather=1

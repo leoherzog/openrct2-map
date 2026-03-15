@@ -73,8 +73,158 @@ function findOpenRCT2(): string {
   const found = knownPaths.find(p => fs.existsSync(p));
   if (found) return found;
 
-  // 3. Fall back to openrct2 on PATH
+  // 3. Check extracted portable directories (from auto-download on Windows)
+  if (process.platform === "win32") {
+    for (const e of entries.filter(e => /^OpenRCT2-.*-windows-portable/.test(e)).sort().reverse()) {
+      const exe = path.resolve(e, "openrct2.exe");
+      if (fs.existsSync(exe)) return exe;
+    }
+  }
+
+  // 4. Fall back to openrct2 on PATH
   return "openrct2";
+}
+
+// ---------------------------------------------------------------------------
+// Portable OpenRCT2 auto-download
+// ---------------------------------------------------------------------------
+
+async function downloadPortableOpenRCT2(): Promise<string | undefined> {
+  let assetPattern: RegExp;
+  let isZip = false;
+
+  if (process.platform === "linux") {
+    assetPattern = process.arch === "arm64"
+      ? /^OpenRCT2-.*-linux-aarch64\.AppImage$/
+      : /^OpenRCT2-.*-linux-x86_64\.AppImage$/;
+  } else if (process.platform === "win32") {
+    assetPattern = process.arch === "arm64"
+      ? /^OpenRCT2-.*-windows-portable-arm64\.zip$/
+      : /^OpenRCT2-.*-windows-portable-x64\.zip$/;
+    isZip = true;
+  } else {
+    return undefined; // macOS not supported for auto-download
+  }
+
+  console.error("Checking for latest OpenRCT2 release...");
+  const resp = await fetch("https://api.github.com/repos/OpenRCT2/OpenRCT2/releases/latest", {
+    headers: { "User-Agent": "openrct2-map" },
+  });
+  if (!resp.ok) {
+    console.error(`Warning: Could not check OpenRCT2 releases (HTTP ${resp.status}).`);
+    return undefined;
+  }
+  const release: any = await resp.json();
+
+  const asset = release.assets?.find((a: any) => assetPattern.test(a.name));
+  if (!asset) {
+    console.error(`Warning: No portable OpenRCT2 found for ${process.platform}/${process.arch}.`);
+    return undefined;
+  }
+  // Reject suspicious asset names (path traversal, shell metacharacters)
+  if (/[/\\]|\.\./.test(asset.name)) {
+    console.error(`Warning: Suspicious asset name '${asset.name}', skipping auto-download.`);
+    return undefined;
+  }
+
+  // Linux: single executable (AppImage)
+  if (!isZip) {
+    const targetPath = path.join(process.cwd(), asset.name);
+    if (fs.existsSync(targetPath)) {
+      console.error(`OpenRCT2 ${release.tag_name} already downloaded.`);
+      return targetPath;
+    }
+    console.error(`Downloading ${asset.name} (${(asset.size / 1048576).toFixed(1)} MB)...`);
+    const dl = await fetch(asset.browser_download_url);
+    if (!dl.ok) throw new Error(`Download failed (HTTP ${dl.status})`);
+    const tmpPath = targetPath + ".tmp";
+    fs.writeFileSync(tmpPath, new Uint8Array(await dl.arrayBuffer()));
+    fs.chmodSync(tmpPath, 0o755);
+    fs.renameSync(tmpPath, targetPath);
+    console.error(`Downloaded ${asset.name}`);
+    return targetPath;
+  }
+
+  // Windows: download and extract portable zip
+  const baseName = asset.name.replace(/\.zip$/, "");
+  const extractDir = path.join(process.cwd(), baseName);
+  const exePath = path.join(extractDir, "openrct2.exe");
+  if (fs.existsSync(exePath)) {
+    console.error(`OpenRCT2 ${release.tag_name} already downloaded.`);
+    return exePath;
+  }
+  const zipPath = path.join(process.cwd(), asset.name);
+  const tmpZipPath = zipPath + ".tmp";
+  console.error(`Downloading ${asset.name} (${(asset.size / 1048576).toFixed(1)} MB)...`);
+  const dl = await fetch(asset.browser_download_url);
+  if (!dl.ok) throw new Error(`Download failed (HTTP ${dl.status})`);
+  fs.writeFileSync(tmpZipPath, new Uint8Array(await dl.arrayBuffer()));
+  fs.renameSync(tmpZipPath, zipPath);
+  // Escape single quotes for PowerShell string interpolation
+  const psZip = zipPath.replace(/'/g, "''");
+  const psDir = extractDir.replace(/'/g, "''");
+  await execFile("powershell", [
+    "-NoProfile", "-Command",
+    `Expand-Archive -Force -Path '${psZip}' -DestinationPath '${psDir}'`,
+  ]);
+  try { fs.unlinkSync(zipPath); } catch {}
+  console.error(`Downloaded and extracted ${asset.name}`);
+  if (fs.existsSync(exePath)) return exePath;
+  // exe might be nested one level deep in the archive
+  for (const entry of fs.readdirSync(extractDir)) {
+    const candidate = path.join(extractDir, entry, "openrct2.exe");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error("Could not find openrct2.exe in extracted archive");
+}
+
+// ---------------------------------------------------------------------------
+// Game asset auto-download
+// ---------------------------------------------------------------------------
+
+async function downloadGameAssets(): Promise<boolean> {
+  const rctDir = path.join(process.cwd(), "assets", "RCT");
+
+  if (fs.existsSync(path.join(rctDir, "Data", "g1.dat"))) return true;
+
+  console.error("Downloading RCT2 game assets from archive.org...");
+  const resp = await fetch("https://archive.org/download/OpenRCT2Assets/RCT.zip");
+  if (!resp.ok) throw new Error(`Download failed (HTTP ${resp.status})`);
+
+  const tmpZipPath = path.join(os.tmpdir(), `openrct2-assets-${Date.now()}.zip.tmp`);
+  const zipPath = tmpZipPath.replace(/\.tmp$/, "");
+  fs.writeFileSync(tmpZipPath, new Uint8Array(await resp.arrayBuffer()));
+  fs.renameSync(tmpZipPath, zipPath);
+
+  fs.mkdirSync(rctDir, { recursive: true });
+  try {
+    if (process.platform === "win32") {
+      const psZip = zipPath.replace(/'/g, "''");
+      const psDir = rctDir.replace(/'/g, "''");
+      await execFile("powershell", ["-NoProfile", "-Command",
+        `Expand-Archive -Force -Path '${psZip}' -DestinationPath '${psDir}'`]);
+    } else {
+      await execFile("unzip", ["-o", "-q", zipPath, "-d", rctDir]);
+    }
+  } finally {
+    try { fs.unlinkSync(zipPath); } catch {}
+  }
+
+  // If the zip contained a nested RCT/ directory, move contents up
+  const nestedRct = path.join(rctDir, "RCT");
+  if (!fs.existsSync(path.join(rctDir, "Data", "g1.dat")) && fs.existsSync(path.join(nestedRct, "Data", "g1.dat"))) {
+    for (const entry of fs.readdirSync(nestedRct)) {
+      fs.renameSync(path.join(nestedRct, entry), path.join(rctDir, entry));
+    }
+    fs.rmSync(nestedRct, { recursive: true, force: true });
+  }
+
+  if (!fs.existsSync(path.join(rctDir, "Data", "g1.dat"))) {
+    throw new Error("Downloaded archive does not contain expected Data/g1.dat");
+  }
+
+  console.error("Downloaded game assets to assets/RCT/");
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,7 +586,7 @@ const removeTimestamp = values.remove as string | undefined;
 const clearSnapshots = values.clear as boolean;
 const forceSnapshot = values.force as boolean;
 const singleZoom = values["single-zoom"] as boolean;
-const openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
+let openrct2Bin = (values.openrct2 as string | undefined) ?? findOpenRCT2();
 function requireInt(value: string, name: string): number {
   const n = parseInt(value, 10);
   if (isNaN(n)) { console.error(`Error: --${name} must be a number, got '${value}'`); process.exit(1); }
@@ -480,6 +630,10 @@ Options:
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   -h, --help               Show this help
 
+Auto-download: If no OpenRCT2 binary or game assets are found, the tool will
+  attempt to download them automatically (GitHub Releases / archive.org).
+  Use --openrct2 or --rct2-data-path to skip auto-download for that component.
+
 Screenshot defaults (applied unless you override that specific flag after --):
   --transparent, --tidy-up-park, --weather=1
 
@@ -522,6 +676,18 @@ if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
   rct2DataPath = (values["rct2-data-path"] as string | undefined) ?? findRCT2Data();
   rct1DataPath = (values["rct1-data-path"] as string | undefined) ?? findRCT1Data();
 
+  // Auto-download game assets if RCT2 data not found locally
+  if (!rct2DataPath && !values["rct2-data-path"]) {
+    try {
+      if (await downloadGameAssets()) {
+        rct2DataPath = findRCT2Data();
+        if (!rct1DataPath) rct1DataPath = findRCT1Data();
+      }
+    } catch (err: any) {
+      console.error(`Warning: Asset auto-download failed: ${err.message}`);
+    }
+  }
+
   // Extra flags after -- are screenshot-specific (e.g. --transparent, --tidy-up-park)
   // Defaults are applied per-flag unless the user overrides that specific concern.
   const userFlags = positionals.slice(1);
@@ -532,6 +698,16 @@ if (!listSnapshots && !renameTimestamp && !removeTimestamp) {
   const tidyFlags = ["--tidy-up-park", "--clear-grass", "--water-plants", "--fix-vandalism", "--remove-litter"];
   if (!tidyFlags.some((f) => hasFlag(f))) defaults.push("--tidy-up-park");
   extraFlags = [...defaults, ...userFlags];
+
+  // Auto-download/update portable OpenRCT2 when not explicitly specified
+  if (!values.openrct2) {
+    try {
+      const downloaded = await downloadPortableOpenRCT2();
+      if (downloaded) openrct2Bin = downloaded;
+    } catch (err: any) {
+      console.error(`Warning: OpenRCT2 auto-download failed: ${err.message}`);
+    }
+  }
 
   console.error(`OpenRCT2 binary: ${openrct2Bin}`);
   if (rct2DataPath) console.error(`RCT2 data: ${path.resolve(rct2DataPath)}`);

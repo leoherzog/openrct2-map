@@ -1,5 +1,9 @@
 {
   "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "noImplicitAny": false
+  },
+  "unstable": ["node-globals"],
   "tasks": {
     "start": "deno run -A main.ts"
   },
