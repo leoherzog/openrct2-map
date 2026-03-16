@@ -760,7 +760,7 @@ async function generateScreenshot(
     outPng,
     "giant",
     String(zoom),
-    String(rotation),
+    String((rotation + 1) % 4),
     ...extraFlags,
   ];
 
