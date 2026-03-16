@@ -314,6 +314,7 @@ interface TimePoint {
   timestamp: string;
   label: string;
   hash?: string;
+  saveHash?: string;
   maxZoom?: number;
   imageWidth?: number;
   imageHeight?: number;
@@ -1314,6 +1315,17 @@ async function main() {
 
   // Read existing manifest or start fresh
   let manifest = readManifest(outputDir);
+
+  // Early-out: skip if save file is unchanged since last snapshot
+  const saveHash = crypto.createHash("sha256").update(fs.readFileSync(inputFile)).digest("hex");
+  if (!forceSnapshot && manifest && manifest.timePoints.length > 0) {
+    const lastSaveHash = manifest.timePoints[manifest.timePoints.length - 1].saveHash;
+    if (lastSaveHash && lastSaveHash === saveHash) {
+      console.error("Save file unchanged since last snapshot — skipping. Use --force to save anyway.");
+      return;
+    }
+  }
+
   const timestamp = makeTimestamp();
   const snapshotDir = path.join(outputDir, "snapshots", timestamp);
   fs.mkdirSync(snapshotDir, { recursive: true });
@@ -1372,6 +1384,7 @@ async function main() {
       timestamp,
       label: snapshotLabel,
       hash: snapshotHash,
+      saveHash,
       maxZoom: Math.max(...metadataList.map(m => m.maxZoom)),
       imageWidth: Math.max(...metadataList.map(m => m.width)),
       imageHeight: Math.max(...metadataList.map(m => m.height)),

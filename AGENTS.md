@@ -258,9 +258,13 @@ Timestamp format: `YYYYMMDD-HHmmss` (filesystem-safe, sorts lexicographically).
 
 Default label: `new Date().toLocaleString()`. Override with `--label`.
 
-### Change detection
+### Change detection (two-tier)
 
-After generating screenshots but before tiling, a SHA-256 hash is computed over all giant PNGs (sorted by path). This hash is stored in `timeline.json` on each timepoint's `hash` field. On subsequent runs, the new hash is compared against the last timepoint's hash — if identical, the snapshot is skipped with a message. The `--force` flag bypasses this check. Snapshots created before this feature (no `hash` field) are never skipped.
+**Save file hash (fast, early-out):** Before any screenshots are generated, a SHA-256 hash of the input save file is computed and compared against the last timepoint's `saveHash` field in `timeline.json`. If identical, the run is skipped immediately — no OpenRCT2 launch, no tiling. This is the common path for automated/cron runs against an unchanged file.
+
+**Screenshot hash (fallback):** After generating screenshots but before tiling, a SHA-256 hash is computed over all giant PNGs (sorted by path). This hash is stored in `timeline.json` on each timepoint's `hash` field. If a different save file produces identical visible output (e.g., guest movement with `--no-peeps`), this second check catches it and skips tiling.
+
+Both checks are bypassed by `--force`. Timepoints missing either hash field (created before these features) are never skipped.
 
 ### Symlink-based deduplication
 
