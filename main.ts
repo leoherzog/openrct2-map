@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";
 import sharp from "sharp";
+import type { PngOptions } from "sharp";
 
 const execFile = promisify(execFileCb);
 
@@ -605,7 +606,7 @@ if (values.concurrency !== undefined) {
 }
 
 if (values.help || (positionals.length === 0 && !listSnapshots && !renameTimestamp && !removeTimestamp)) {
-  let helpText = `Usage: main.ts <savefile> [options] [-- openrct2-flags...]
+  let helpText = `Usage: node main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
@@ -639,8 +640,8 @@ Screenshot defaults (applied unless you override that specific flag after --):
   --transparent, --tidy-up-park, --weather=1
 
 Extra flags after -- are forwarded to openrct2 screenshot, e.g.:
-  deno run -A main.ts park.park -o out -- --no-peeps
-  deno run -A main.ts park.park -o out -- --weather=3  (overrides default sunny)`;
+  node main.ts park.park -o out -- --no-peeps
+  node main.ts park.park -o out -- --weather=3  (overrides default sunny)`;
 
   console.error(`Using OpenRCT2: ${openrct2Bin}`);
   const screenshotFlags = await getScreenshotFlags(openrct2Bin);
@@ -813,7 +814,7 @@ async function generateTiles(
     `  Tiling rotation ${rotation}: ${width}x${height}px -> ${tileDir}`,
   );
 
-  const pngOpts: sharp.PngOptions = {
+  const pngOpts: PngOptions = {
     compressionLevel,
     ...(usePalette && { palette: true }),
     ...(pngEffort !== undefined && { effort: pngEffort }),

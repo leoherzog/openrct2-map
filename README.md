@@ -1,7 +1,6 @@
 # OpenRCT2 Map Generator
 
 [![OpenRCT2](https://img.shields.io/badge/OpenRCT2-338000?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAkVJREFUeNqdkV1Ik1EYxx81I7xJoxCpQOec364aNdzU1vJjalZ+lUtdr2STOa2JoRBrV5UEQWFlK6mjC5uKEN5EF4F33o5RrezGiHlhc0PKodty/7YXDAY1nD944HDO+f/geR6KhrpayVpUpxjthHDwbI8V9QYrGstLY5NcqFKw2u7XMGmG8XB6Hh1GK+oUsu1JmitPMlXXBEZMjXAIk+D7VonPo/ehMU1CJZdGlzRVlLGKzgmUm5zo7r2IwUIRNB3FGGqthmHajat3pqCUSiIk8VuHhlCfnsNaLpBaRomJcbS8+osW3Gs0b/fRksvH36VJKimveYArlRxhEYL60yXMfVDL+Q/wYb4ke70kF8ZT1xWOVO1qStod5O/TZdV0nLvJScWFjBecU8qZK03L+fbz4b+V5l+kgAukkBVTvrKG6jI8tC/Ry7/lKGpJqb/FHcvPZfHBICgujiLCe346KTXZScrFFQosq2mlX0vvZ2cIq9+3/oQyoM0giKdKfoKVd1pQe3cJ54e+QiO/hHfXE7BAhM0fIqCtCLNPR2B848DoJy8GzVMoys6O3Eh4ujX6V5A1GaBL2oW3vQn4wgtygJpDcFoYzPY13HgyiQKR6N/rLAlN90xDK67198FyzwBHjx6/Pe0IGsXYuD2AvkdW5GdlMYqGVFzA1G2XYX45DvvHD/AHfFjfWMf442HkCoWMtsPRvFzWUibFmE6HubkZWMZeICcz00axEO7zWUoKnj8QQyQQ2EQZgmSKlWyBgGWlZ9hC9d/wHzypBADY4Fw9AAAAAElFTkSuQmCC)](#)
-[![Deno](https://img.shields.io/badge/Deno-000?logo=deno&logoColor=fff)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-6DA55F?logo=node.js&logoColor=white)](#)
 [![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)](#)
 
@@ -16,7 +15,7 @@ Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — l
 |---|---|
 | **OpenRCT2** | Auto-downloaded on first run, or pass `--openrct2 <path>` |
 | **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | Auto-downloaded on first run, or place in `./assets/RCT/` |
-| **Deno 1.40+** or **Node.js >=18.17** | Deno is primary; Node works via `npx tsx` |
+| **Node.js 24+** | Run `npm install` once to fetch dependencies |
 
 On first run, the tool will automatically download the latest OpenRCT2 portable binary (Linux/Windows) and RCT2 game assets if they aren't already present. Use `--openrct2` or `--rct2-data-path` to skip auto-download for that component.
 
@@ -28,45 +27,45 @@ RCT1 data (`Data/csg1.dat`) is only required if your park uses RCT1 objects (rid
 > Multiple runs will build up timeline history in the output directory. Only the deltas are saved between runs. This saves storage space, but means **you cannot simply remove a directory to clear snapshots without breaking symbolic links**. Use the `--remove` flag to clear unwanted snapshots from history, and the `--clear` flag to clear all snapshots and start fresh.
 
 ```sh
+# Install dependencies (once)
+npm install
+
 # Render a park and serve the result
-deno run -A main.ts MyPark.park -o ./output
+node main.ts MyPark.park -o ./output
 uv run python3 -m http.server -d ./output
 
 # Build up a timeline — each run adds a snapshot
 # (unchanged maps are skipped automatically)
-deno run -A main.ts MyPark.park -o ./output --label "Week 1"
-deno run -A main.ts MyPark.park -o ./output --label "Week 2"
+node main.ts MyPark.park -o ./output --label "Week 1"
+node main.ts MyPark.park -o ./output --label "Week 2"
 
 # Force a snapshot even if the map hasn't changed
-deno run -A main.ts MyPark.park -o ./output --force --label "Week 2 (copy)"
+node main.ts MyPark.park -o ./output --force --label "Week 2 (copy)"
 
 # Override screenshot flags (stormy weather, no guests)
-deno run -A main.ts MyPark.park -o ./output -- --weather=3 --no-peeps
+node main.ts MyPark.park -o ./output -- --weather=3 --no-peeps
 
 # List all snapshots
-deno run -A main.ts --list -o ./output
+node main.ts --list -o ./output
 
 # Rename a snapshot's label
-deno run -A main.ts --rename 20260312-143022 --label "New label" -o ./output
+node main.ts --rename 20260312-143022 --label "New label" -o ./output
 
 # Remove a snapshot
-deno run -A main.ts --remove 20260312-143022 -o ./output
+node main.ts --remove 20260312-143022 -o ./output
 
 # Clear all snapshots and start fresh
-deno run -A main.ts MyPark.park -o ./output --clear
-
-# Node alternative
-npx tsx main.ts MyPark.park -o ./output
+node main.ts MyPark.park -o ./output --clear
 ```
 
 > [!NOTE]
 > On Windows, tile deduplication uses symbolic links, which require either **Administrator privileges** or [**Developer Mode**](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development) to be enabled (Settings → Update & Security → For developers). Without one of these, you'll get `os error 1314: A required privilege is not held by the client`.
 
-## `deno run main.ts --help`
+## `node main.ts --help`
 
 ```sh
-$ deno run -A main.ts --help
-Usage: main.ts <savefile> [options] [-- openrct2-flags...]
+$ node main.ts --help
+Usage: node main.ts <savefile> [options] [-- openrct2-flags...]
 
 Options:
   -o, --output <dir>       Output directory (default: ./output)
@@ -100,8 +99,8 @@ Screenshot defaults (applied unless you override that specific flag after --):
   --transparent, --tidy-up-park, --weather=1
 
 Extra flags after -- are forwarded to openrct2 screenshot, e.g.:
-  deno run -A main.ts park.park -o out -- --no-peeps
-  deno run -A main.ts park.park -o out -- --weather=3  (overrides default sunny)
+  node main.ts park.park -o out -- --no-peeps
+  node main.ts park.park -o out -- --weather=3  (overrides default sunny)
 
 OpenRCT2 screenshot flags (pass after --):
     --weather=<int>           weather to be used (0 = default, 1 = sunny, ..., 6 = thunder).

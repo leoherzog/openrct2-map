@@ -4,14 +4,14 @@ Generates a Leaflet-based tile map viewer from OpenRCT2 park saves — similar t
 
 ## Architecture
 
-Single-file tool: `main.ts` (~1150 lines). No build step. Runs with `deno run -A main.ts` or Node (via tsx).
+Single-file tool: `main.ts`. No build step: Node runs it directly with built-in type stripping (`node main.ts`). Only erasable TypeScript works, so no enums, namespaces or parameter properties, and type-only imports must use `import type`. `npm run check` enforces this and type-checks with `tsc`.
 
 **Pipeline:** CLI parse → screenshot (openrct2) → tile (sharp) → HTML generation
 
 ### Dependencies
 
-- **Runtime:** Deno (primary) or Node 18+
-- **npm:** `sharp` (only dependency, mapped in `deno.json`)
+- **Runtime:** Node.js 24+ (LTS)
+- **npm:** `sharp` (only runtime dependency); `typescript` and `@types/node` for `npm run check`
 - **External:** OpenRCT2 binary/AppImage (auto-detected, auto-downloaded, or via `--openrct2`)
 - **Browser CDN:** Leaflet 1.x from jsDelivr (loaded by generated index.html)
 
@@ -128,7 +128,9 @@ var bounds = L.latLngBounds(
 
 ```
 openrct2-map/
-  deno.json                  # Config: nodeModulesDir, tasks, sharp import map
+  package.json               # Scripts (start, check), sharp, type-checking dev deps
+  package-lock.json
+  tsconfig.json              # tsc settings for `npm run check` (no emit)
   main.ts                    # Single entry point (CLI, screenshots, tiling, HTML)
   AGENTS.md                  # This file
   OpenRCT2-*.AppImage        # User-provided binary (not committed)
@@ -164,10 +166,10 @@ Generated output:
 
 ```bash
 # Minimal — auto-detects everything, screenshot defaults applied
-deno run -A main.ts <savefile> -o ./output
+node main.ts <savefile> -o ./output
 
 # Explicit overrides
-deno run -A main.ts <savefile> \
+node main.ts <savefile> \
   --openrct2 ./OpenRCT2-v0.4.32-linux-x86_64.AppImage \
   --rct2-data-path ./assets/RCT \
   --rct1-data-path ./assets/RCT \
@@ -190,13 +192,13 @@ deno run -A main.ts <savefile> \
 --domain https://example.com/map # base URL for OG meta tags and og-image.png
 
 # List all snapshots
-deno run -A main.ts --list -o ./output
+node main.ts --list -o ./output
 
 # Rename a snapshot's label
-deno run -A main.ts --rename 20260312-143022 --label "New label" -o ./output
+node main.ts --rename 20260312-143022 --label "New label" -o ./output
 
 # Remove a snapshot
-deno run -A main.ts --remove 20260312-143022 -o ./output
+node main.ts --remove 20260312-143022 -o ./output
 
 # Serve result
 python3 -m http.server -d ./output
