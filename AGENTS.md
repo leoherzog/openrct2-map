@@ -170,7 +170,7 @@ node main.ts <savefile> -o ./output
 
 # Explicit overrides
 node main.ts <savefile> \
-  --openrct2 ./OpenRCT2-v0.4.32-linux-x86_64.AppImage \
+  --openrct2 ./OpenRCT2-vX.X.X-linux-X.AppImage \
   --rct2-data-path ./assets/RCT \
   --rct1-data-path ./assets/RCT \
   -o ./output \
