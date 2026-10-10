@@ -89,6 +89,7 @@ Options:
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
   --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
+  --status <name>          Show live online/offline status of this advertised server
   -h, --help               Show this help
 
 Auto-download: If no OpenRCT2 binary or game assets are found, the tool will

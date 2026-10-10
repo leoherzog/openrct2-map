@@ -455,7 +455,7 @@ function materializeSymlinksPointingTo(dir: string, targetPrefix: string): void 
   }
 }
 
-function removeSnapshot(outputDir: string, timestamp: string, domain?: string): void {
+function removeSnapshot(outputDir: string, timestamp: string, domain?: string, status?: string): void {
   const manifest = requireManifest(outputDir);
 
   if (manifest.timePoints.length <= 1) {
@@ -490,7 +490,7 @@ function removeSnapshot(outputDir: string, timestamp: string, domain?: string): 
   manifest.timePoints.splice(idx, 1);
   writeManifest(outputDir, manifest);
 
-  fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain));
+  fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain, status));
 
   console.error(`Removed snapshot '${timestamp}'. ${manifest.timePoints.length} snapshot(s) remain.`);
 }
@@ -575,6 +575,7 @@ const { values, positionals } = parseArgs({
     concurrency: { type: "string" },
     "single-zoom": { type: "boolean", default: false },
     domain: { type: "string" },
+    status: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
   // Everything after -- is collected in positionals (extra flags for openrct2)
@@ -601,6 +602,10 @@ const pngEffort = values.effort !== undefined ? requireInt(values.effort as stri
 const usePalette = values.palette as boolean;
 const skipBlanks = requireInt(values["skip-blanks"] as string, "skip-blanks");
 const domain = values.domain as string | undefined;
+if (values.status !== undefined && (typeof values.status !== "string" || !values.status.trim())) {
+  console.error("Error: --status requires a server name."); process.exit(1);
+}
+const statusName = values.status as string | undefined;
 if (values.concurrency !== undefined) {
   sharp.concurrency(requireInt(values.concurrency as string, "concurrency"));
 }
@@ -630,6 +635,7 @@ Options:
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
   --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
+  --status <name>          Show live online/offline status of this advertised server
   -h, --help               Show this help
 
 Auto-download: If no OpenRCT2 binary or game assets are found, the tool will
@@ -897,7 +903,7 @@ const FONT_RCT2 = 'data:font/woff2;base64,d09GMk9UVE8AAArIAAkAAAAAKmAAAAqAAAEAAA
 // HTML generation
 // ---------------------------------------------------------------------------
 
-function generateHtml(manifest: TimelineManifest, domain?: string): string {
+function generateHtml(manifest: TimelineManifest, domain?: string, status?: string): string {
   const hasTimeline = manifest.timePoints.length > 1;
   const lastLabel = manifest.timePoints[manifest.timePoints.length - 1].label;
   const baseUrl = domain ? domain.replace(/\/$/, "") + "/" : undefined;
@@ -982,6 +988,29 @@ function generateHtml(manifest: TimelineManifest, domain?: string): string {
     pointer-events: none;
     z-index: 1000;
   }
+
+  .server-status {
+    max-width: calc(100vw - 72px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: #fff;
+    font-family: 'RCT2', monospace;
+    font-size: 13px;
+    line-height: 1;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+  .server-status::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    background: #888;
+    box-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+  .server-status[data-state="online"]::before { background: #4c4; }
+  .server-status[data-state="offline"]::before { background: #e33; }
 </style>
 </head>
 <body>
@@ -1218,7 +1247,51 @@ ${hasTimeline ? `
     zoomInText: '<img src="' + ICON_ZOOM_IN + '" alt="Zoom in">',
     zoomOutText: '<img src="' + ICON_ZOOM_OUT + '" alt="Zoom out">',
   }).addTo(map);
+${status ? `
+  // Server status from the master server list, which only lists servers with advertise = true.
+  // Accept: application/json is required, or the endpoint serves its HTML page.
+  var STATUS_NAME = ${JSON.stringify(status).replace(/</g, "\\u003c")};
+  function plainName(s) { return s.replace(/[{][^}]*[}]/g, '').replace(/\\s+/g, ' ').trim(); }
+  var statusLabel = plainName(STATUS_NAME);
+  var statusKey = statusLabel.toLowerCase();
 
+  var StatusControl = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function() {
+      var el = L.DomUtil.create('div', 'server-status');
+      el.setAttribute('role', 'status');
+      L.DomEvent.disableClickPropagation(el);
+      return el;
+    },
+  });
+  var statusEl = new StatusControl().addTo(map).getContainer();
+
+  function showStatus(state, text) {
+    statusEl.dataset.state = state;
+    statusEl.textContent = statusLabel + ': ' + text;
+    statusEl.title = statusEl.textContent;
+  }
+
+  function refreshStatus() {
+    if (document.hidden) return;
+    fetch('https://servers.openrct2.io/', { headers: { Accept: 'application/json' }, cache: 'no-cache' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        var server = data.servers.find(function(s) { return plainName(s.name).toLowerCase() === statusKey; });
+        if (server) showStatus('online', 'Online (' + server.players + '/' + server.maxPlayers + ')');
+        else showStatus('offline', 'Offline');
+      })
+      .catch(function() { showStatus('unknown', 'Unknown'); });
+  }
+
+  showStatus('unknown', 'Checking');
+  refreshStatus();
+  setInterval(refreshStatus, 60000);
+  document.addEventListener('visibilitychange', refreshStatus);
+` : ''}
   // Keyboard shortcuts
   document.addEventListener('keydown', function(e) {
     if (e.target !== document.body) return;
@@ -1289,14 +1362,14 @@ async function main() {
     }
     tp.label = snapshotLabel;
     writeManifest(outputDir, manifest);
-    fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain));
+    fs.writeFileSync(path.join(outputDir, "index.html"), generateHtml(manifest, domain, statusName));
     console.error(`Renamed snapshot '${renameTimestamp}' to '${snapshotLabel}'.`);
     return;
   }
 
   // Handle --remove mode
   if (removeTimestamp) {
-    removeSnapshot(outputDir, removeTimestamp, domain);
+    removeSnapshot(outputDir, removeTimestamp, domain, statusName);
     return;
   }
 
@@ -1430,7 +1503,7 @@ async function main() {
 
     // Generate HTML viewer
     const htmlPath = path.join(outputDir, "index.html");
-    fs.writeFileSync(htmlPath, generateHtml(manifest, domain));
+    fs.writeFileSync(htmlPath, generateHtml(manifest, domain, statusName));
     console.error(`Viewer written to ${htmlPath}`);
   } finally {
     // Clean up giant PNGs and temp config

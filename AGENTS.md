@@ -14,6 +14,7 @@ Single-file tool: `main.ts`. No build step: Node runs it directly with built-in 
 - **npm:** `sharp` (only runtime dependency); `typescript` and `@types/node` for `npm run check`
 - **External:** OpenRCT2 binary/AppImage (auto-detected, auto-downloaded, or via `--openrct2`)
 - **Browser CDN:** Leaflet 1.x from jsDelivr (loaded by generated index.html)
+- **Browser API:** `https://servers.openrct2.io/` master server list (only with `--status`)
 
 ## OpenRCT2 CLI Quirks
 
@@ -190,6 +191,7 @@ node main.ts <savefile> \
 --skip-blanks 10                 # alpha threshold for blank tiles (default: -1)
 --concurrency 2                  # libvips thread count (default: CPU cores)
 --domain https://example.com/map # base URL for OG meta tags and og-image.png
+--status "My Server"             # live online/offline widget for an advertised server
 
 # List all snapshots
 node main.ts --list -o ./output
@@ -318,6 +320,14 @@ The viewer persists map state in the URL hash fragment (`#z=3&lat=-5.00&lng=4.00
 ### Rotation button
 
 The rotate button is hidden when `CONFIG.rotations` has only one entry (e.g. `--rotations 0`). Since rotations are per-output-directory (stored in `timeline.json`), this applies to all snapshots in the timeline.
+
+### Server status widget (`--status`)
+
+`--status <name>` adds a top-right widget showing whether a multiplayer server is online, with its player count. The viewer fetches `https://servers.openrct2.io/` from the browser every 60 seconds while the tab is visible. The request must send `Accept: application/json`, or the endpoint serves its HTML page instead. The endpoint sends `Access-Control-Allow-Origin: *`, so no backend is needed.
+
+Matching ignores formatting codes like `{YELLOW}`, case, and repeated whitespace. Only servers with `advertise = true` in their config appear in the list, so an unadvertised server always shows Offline. A failed fetch shows Unknown, not Offline.
+
+Like `--domain`, the flag is not stored in `timeline.json`. Pass it to `--rename` and `--remove` too, or the regenerated viewer drops the widget.
 
 ### OpenGraph / social preview (`--domain`)
 
