@@ -1,20 +1,19 @@
 # OpenRCT2 Map Viewer
 
-Generates a Leaflet-based tile map viewer from OpenRCT2 park saves — similar to Dynmap/Pigmap for Minecraft.
+Generates a Leaflet tile map viewer from OpenRCT2 park saves, like Dynmap or Pigmap for Minecraft.
 
 ## Architecture
 
-Single-file tool: `main.ts`. No build step: Node runs it directly with built-in type stripping (`node main.ts`). Only erasable TypeScript works, so no enums, namespaces or parameter properties, and type-only imports must use `import type`. `npm run check` enforces this and type-checks with `tsc`.
+`main.ts` is the whole tool. Node runs it directly with built-in type stripping, so there is no build step. Only erasable TypeScript works: no enums, namespaces or parameter properties, and type-only imports use `import type`. `npm run check` enforces this and type-checks with `tsc`.
 
-**Pipeline:** CLI parse → screenshot (openrct2) → tile (sharp) → HTML generation
+**Pipeline:** CLI parse → screenshot (OpenRCT2) → tile (Sharp) → HTML
 
 ### Dependencies
 
-- **Runtime:** Node.js 24+ (LTS)
-- **npm:** `sharp` (only runtime dependency); `typescript` and `@types/node` for `npm run check`
-- **External:** OpenRCT2 binary/AppImage (auto-detected, auto-downloaded, or via `--openrct2`)
-- **Browser CDN:** Leaflet 1.x from jsDelivr (loaded by generated index.html)
-- **Browser API:** `https://servers.openrct2.io/` master server list (only with `--status`)
+- **Runtime:** Node.js 24+
+- **npm:** `sharp` is the only runtime dependency; `typescript` and `@types/node` serve `npm run check`
+- **External:** OpenRCT2
+- **Browser:** Leaflet 1.x from jsDelivr, plus the `https://servers.openrct2.io/` master server list with `--status`
 
 ## OpenRCT2 CLI Quirks
 
@@ -24,316 +23,183 @@ Single-file tool: `main.ts`. No build step: Node runs it directly with built-in 
 openrct2 screenshot <file> <output.png> giant <zoom> <rotation> [flags]
 ```
 
-- Rotations: 0-3 (four 90-degree views)
-- Zoom: 0 = closest (1:1 pixels), higher = more zoomed out. Default 1 is a good balance.
-- Screenshot-specific flags: `--transparent`, `--tidy-up-park`, `--fix-vandalism`, `--remove-litter`, `--no-peeps`, `--no-sprites`, `--weather=N`, `--mowed-grass`, `--clear-grass`, `--water-plants`, `--draw-bounding-boxes`, `--draw-segment-heights`
-- Run `openrct2 -ha` to enumerate all screenshot flags (the `screenshot` subcommand rejects `-h`/`--help` directly)
+- Zoom 0 is 1:1 pixels. The tool accepts 0-3.
+- The tool passes `(r + 1) % 4` as `<rotation>`, so its rotation 0, in `--rotations`, snapshot directories and the URL's `r`, is OpenRCT2's rotation 1.
+- `--weather=N`: 0 keeps the save's weather, 1 is sunny, 3 cloudy, 6 thunder.
+- `openrct2 -ha` lists the screenshot flags; the `screenshot` subcommand rejects `-h` and `--help`. `node main.ts --help` appends that section from the detected binary, or omits it if the binary is missing or parsing fails.
+- Each screenshot runs under `execFile` with a 10-minute timeout and the default 1 MB `maxBuffer`. OpenRCT2 warns once per conflicting scenario in the data path, and output past 1 MB fails the run with `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`.
 
 ### Global vs subcommand options
 
-**The `screenshot` subcommand has its own option parser** that does NOT recognize global options like `--rct2-data-path`, `--rct1-data-path`, `--user-data-path`, or `--headless`. These cannot be passed on the command line at all with the screenshot subcommand:
+The `screenshot` subcommand has its own option parser, which rejects global options such as `--rct2-data-path`, `--rct1-data-path`, `--user-data-path` and `--headless` in either `--key=value` or `--key value` form. Before `screenshot` they fail with "All options must be passed at the end of the command line", and after the positional args with "Unknown option: --rct2-data-path".
 
-- Placing them before `screenshot` → "All options must be passed at the end of the command line"
-- Placing them after positional args → "Unknown option: --rct2-data-path"
-- Both `--key=value` and `--key value` forms fail
+### Config workaround via XDG_CONFIG_HOME (Linux only)
 
-### Config workaround via XDG_CONFIG_HOME
+On Linux the tool writes a minimal config to `<tmpdir>/openrct2-map-XXXXXX/OpenRCT2/config.ini` and sets OpenRCT2's `XDG_CONFIG_HOME` to that temp directory:
 
-The solution is to create a temporary directory with a minimal `config.ini` and set `XDG_CONFIG_HOME` in the environment:
-
-```
-/tmp/openrct2-map-XXXXX/
-  OpenRCT2/
-    config.ini
-```
-
-Minimal `config.ini` for screenshots:
 ```ini
 [general]
-game_path = "/absolute/path/to/assets"
-rct1_path = "/absolute/path/to/assets"
+game_path = "/absolute/path/to/assets/RCT"
+rct1_path = "/absolute/path/to/assets/RCT"
 ```
 
-- `game_path` is **required** (directory containing `Data/g1.dat`). Without it: "Unable to load g1 graphics".
-- `rct1_path` is **optional** (directory containing `Data/csg1.dat`). Only needed for RCT1 scenarios. The CSG1.DAT must be the Loopy Landscapes version specifically.
-- Both paths point to the parent directory (e.g., `assets/RCT`), not to `assets/RCT/Data`.
+- `game_path` is required, or OpenRCT2 fails with "Unable to load g1 graphics". Headless screenshot mode skips OpenRCT2's own Steam/GOG search, so it never falls back to an installed copy.
+- `rct1_path` is optional, needed only for parks that use RCT1 objects or scenarios. Its `csg1.dat` must be the Loopy Landscapes version.
+- Both name the parent of `Data/`, such as `assets/RCT`.
 
-This approach is self-contained: it doesn't touch `~/.config/OpenRCT2/config.ini`.
+The tool never writes the user's own `~/.config/OpenRCT2/config.ini`. The override hides it from OpenRCT2, so discovery reads its `game_path` and `rct1_path` instead.
 
-### execFile buffer limit
-
-OpenRCT2 writes verbose scenario-conflict warnings to stdout. For parks with many scenarios in the data path, stdout can be large. The `execFile` default `maxBuffer` (1MB) is usually sufficient but could be increased if needed.
+Only OpenRCT2's Linux build reads `XDG_CONFIG_HOME`. Windows reads `Documents\OpenRCT2\config.ini` and macOS `~/Library/Application Support/OpenRCT2/config.ini`, and the screenshot subcommand accepts no override. There the tool skips game data discovery and download, ignores `--rct2-data-path` and `--rct1-data-path`, and says so in one line. Unverified until run on Windows or macOS.
 
 ## Sharp Tiling
 
-### Layout
+### Layout and format
 
-`sharp.tile({ layout: 'google' })` generates a `z/row/col.png` directory structure. Sharp does NOT have a Leaflet-specific layout. Available layouts: `dz`, `google`, `zoomify`, `iiif`, `iiif3`.
+`.tile({ layout: "google" })` writes `{z}/{y}/{x}.png`: row directories holding column files. The Leaflet URL template is therefore `{z}/{y}/{x}.png`, the reverse of the usual `{z}/{x}/{y}.png`.
 
-### Axis swap
-
-Sharp's google layout outputs `{z}/{row}/{col}.png` — rows are directories, columns are files. Leaflet's URL template uses `{z}/{x}/{y}` where x=column, y=row. **The Leaflet URL must be `{z}/{y}/{x}.png`** to compensate for the swap.
-
-Verified empirically: a 2048x1536 image (8 cols, 6 rows) produces 6 directories (rows) each containing 8 files (cols).
+Chain `.png()` before `.tile()`, or Sharp writes JPEG tiles. Tile output takes only the compression level from `.png()` and ignores `palette`, `effort` and the other quantization options, so `--palette` re-encodes every written tile in a second pass.
 
 ### Transparent tile skipping
 
-`skipBlanks: -1` skips fully transparent tiles. This saves significant space for isometric maps where the diamond shape leaves ~50% of the bounding rectangle empty.
+`skipBlanks: n` skips a tile when every channel of every pixel is within n of the background, transparent black. OpenRCT2's `--transparent` pixels are exactly (0,0,0,0), so the default `--skip-blanks 0` drops the empty tiles around the isometric diamond, about half the grid. `-1` writes every tile. Leaflet renders the 404 for a skipped tile as empty.
 
-### PNG format
+### Tuning flags
 
-Chain `.png()` before `.tile()` to ensure PNG output with alpha channel. Without it, tiles may default to JPEG.
-
-### Performance tuning (CLI-exposed)
-
-- **`--compression 0`** — biggest speed win. Skips zlib entirely; tiles are ~3-4x larger but tiling completes ~50% faster.
-- **`--palette`** — indexed-color PNG. RCT2 sprites are inherently low-color, so this can shrink tiles 60-70% with minimal quality loss.
-- **`--effort`** — controls zlib strategy (1-10). Lower values trade file size for speed. Only meaningful when compression > 0.
-- **`--tile-size`** — stored in `timeline.json` as `tileSize` and read by the Leaflet viewer. Changing tile size on an existing output directory will cause a mismatch with older snapshots.
-- **`--skip-blanks`** — `-1` means only fully transparent tiles are skipped. Higher values (0-255) set an alpha threshold below which tiles are considered blank.
-- **`--concurrency`** — maps to `sharp.concurrency(n)`. Set to 1 on memory-constrained systems.
-- **`--single-zoom`** — disables native zoom pyramid. Only renders at the specified `--zoom` level and lets Sharp downscale all lower zoom levels. Faster but blurrier zoomed-out tiles.
+- **`--palette`** writes indexed-color PNGs. It runs after tiling and before dedup: dedup compares final bytes, and rewriting a symlinked tile would change an older snapshot. At effort 4 and above, native zoom levels stay lossless because OpenRCT2 renders from a 256-color palette with binary alpha; downscaled levels are dithered.
+- **`--effort`** implies `--palette`. Efforts 1-3 posterize the input, so native levels turn lossy and files grow. It does not affect zlib.
 
 ### Native zoom pyramid (default)
 
-By default, the tool renders at multiple OpenRCT2 zoom levels (from `--zoom N` through zoom 3) and stitches their native-resolution tiles into the Leaflet tile pyramid. This means each zoom band in the viewer uses RCT2's dedicated pixel-art sprites for that scale, rather than bilinear-downscaled tiles from a single high-res render.
+The tool renders OpenRCT2 zooms `--zoom` through 3 and merges them, so each Leaflet zoom shows RCT2's own sprites for that scale instead of downscaled tiles. Each OpenRCT2 zoom step halves the image, so consecutive renders tile to a `maxZoom` one apart on the same grid.
 
-**How it works:** OpenRCT2 zoom levels 0-3 each produce images at exactly 2× scale differences. When Sharp tiles each image, the maxZoom differs by exactly 1 between consecutive zoom levels, and the tile grids (z/y/x coordinates) align perfectly.
+`assembleNativeTiles()` tiles the most zoomed-out render as the full pyramid. It tiles each closer render into a `.tmp-nz-*` directory and moves only that render's `maxZoom` level over the downscaled one. The finest render's size and `maxZoom` define the viewer's coordinates.
 
-Assembly strategy for `--zoom 1` (default, ozRange=[1,2,3]):
-1. Tile OZ3 (most zoomed out) → full pyramid z=0 through z=maxZoom₃ (base + downscales)
-2. Tile OZ2 → take only z=maxZoom₂ (native tiles) → replace downscaled version in output
-3. Tile OZ1 → take only z=maxZoom₁ (native tiles) → replace downscaled version in output
-
-Performance: ~30% more screenshot and tiling time vs single-zoom. The extra OZ renders are fast (smaller images).
+For `--zoom 1` this costs about 30% more screenshot and tiling time than `--single-zoom`, which renders only `--zoom` and lets Sharp downscale the lower levels, blurring them.
 
 ## Leaflet Coordinate System
 
 ### L.CRS.Simple bounds calculation
 
-Sharp's google layout pads the image to a power-of-2 tile grid. The full grid always spans 256 CRS units in each axis. The actual image occupies a fraction:
+The viewer uses `L.CRS.Simple`. `latLng(0, 0)` is the image's top-left corner, and one CRS unit is `2^maxZoom` image pixels, so `pixel_y = -lat * 2^maxZoom`. Tile y=0 is the top row, as in Sharp's google layout, so `tms` stays off. Sharp pads each render to a power-of-two tile grid spanning `tileSize` CRS units per axis. The image fills only part of it, so each tile layer is bounded to its own image, from `[-imageHeight / 2^maxZoom, 0]` to `[0, imageWidth / 2^maxZoom]`.
 
-```js
-var scale = Math.pow(2, maxZoom);
-var bounds = L.latLngBounds(
-  L.latLng(-imageHeight / scale, 0),  // southwest (bottom-left)
-  L.latLng(0, imageWidth / scale)     // northeast (top-right)
-);
-```
-
-- `L.CRS.Simple` transformation flips y: `pixel_y = -lat * scale`
-- Tile y=0 is at the top (matching sharp's google layout), so `tms: true` is NOT needed
-- `latlng(0, 0)` = top-left corner of the image
+Each timepoint stores its own `maxZoom`, `imageWidth` and `imageHeight`, so parks of different sizes can share an output directory. The map fits and clamps to the union of all timepoint bounds, and a layer with a lower `maxZoom` upscales through `maxNativeZoom`. Top-level values are maxima across timepoints and stand in for timepoints without their own.
 
 ## File Structure
 
 ```
 openrct2-map/
-  package.json               # Scripts (start, check), sharp, type-checking dev deps
-  package-lock.json
-  tsconfig.json              # tsc settings for `npm run check` (no emit)
-  main.ts                    # Single entry point (CLI, screenshots, tiling, HTML)
-  AGENTS.md                  # This file
-  OpenRCT2-*.AppImage        # User-provided binary (not committed)
+  main.ts                    # The whole tool
+  package.json, tsconfig.json
+  example/                   # Committed render; .github/workflows/deploy-pages.yml publishes it on push
+  OpenRCT2-*.AppImage        # Downloaded or user-provided binary (gitignored)
   assets/
-    RCT/                     # Game data (not committed)
-      Data/g1.dat, csg1.dat
-      ObjData/, Scenarios/, Tracks/
-    rotate.png               # UI icons (base64-embedded in generated HTML)
-    zoom-in.png
-    zoom-out.png
-    previous.png             # Timeline step-back button
-    next.png                 # Timeline step-forward button
-    rct2.otf                 # RCT2 bitmap font
-    rct2.otf.woff2           # RCT2 font (woff2, embedded in timeline UI)
-    sprites.png              # RCT2 UI sprite sheet
-  test/                      # Test park files (not committed)
+    RCT/                     # RCT2 and RCT1 game data (gitignored)
+    rotate.png, zoom-in.png, zoom-out.png, previous.png, next.png  # Viewer buttons
+    rct2.otf, rct2.otf.woff2 # RCT2 bitmap font; the viewer uses the woff2
+    roller-coaster-sharp-duotone-light-full.svg  # Favicon
+    sprites.png              # RCT2 UI sprite sheet, source art
+    openrct2-logo.svg, openrct2-logo-16px.png, screenshot.png  # README images
+  test/                      # Local park files and run.sh, which renders example/ (gitignored)
 ```
+
+`main.ts` holds the button PNGs and the woff2 font as base64 constants (`ICON_*`, `FONT_RCT2`) and reads only `assets/RCT` at runtime. After editing one of those files, re-encode it into `main.ts`. `FAVICON` is a hand-minified copy of the favicon SVG.
 
 Generated output:
 ```
 <output-dir>/
-  index.html                 # Self-contained viewer (inline CSS/JS, Leaflet from CDN)
-  og-image.png               # OG preview image (only generated when --domain is set)
-  timeline.json              # Manifest of all snapshots
+  index.html                 # Self-contained viewer; Leaflet from CDN
+  og-image.png               # Only with --domain
+  timeline.json              # Snapshot manifest
   snapshots/
-    <timestamp>/             # e.g. 20260312-143022
+    <timestamp>/             # One per run, e.g. 20260312-143022
       <rot>/<z>/<row>/<col>.png
-    <timestamp>/             # each run appends a new snapshot
-      ...
+      <rot>/blank.png        # Written by Sharp
+      vips-properties.xml    # Written by Sharp
 ```
 
 ## Usage
 
-```bash
-# Minimal — auto-detects everything, screenshot defaults applied
-node main.ts <savefile> -o ./output
+`node main.ts --help` lists every flag. With explicit paths:
 
-# Explicit overrides
-node main.ts <savefile> \
+```bash
+node main.ts <savefile> -o ./output \
   --openrct2 ./OpenRCT2-vX.X.X-linux-X.AppImage \
   --rct2-data-path ./assets/RCT \
-  --rct1-data-path ./assets/RCT \
-  -o ./output \
   -- --weather=3 --no-peeps
-
-# Other flags
---zoom 1                         # finest zoom level (default: 1); also renders 2,3 for native sprites
---single-zoom                    # only render at the specified zoom (skip native zoom pyramid)
---rotations 0,1,2,3              # which rotations to render
---label "March update"           # custom snapshot label (default: locale date/time)
---clear                          # clear all existing snapshots before generating
---force                          # save even if map is unchanged from last run
---tile-size 512                  # tile size in pixels (default: 256)
---compression 0                  # PNG compression 0-9 (default: 6, 0 = fastest)
---effort 1                       # PNG effort 1-10 (lower = faster)
---palette                        # indexed-color PNG (smaller for pixel art)
---skip-blanks 10                 # alpha threshold for blank tiles (default: -1)
---concurrency 2                  # libvips thread count (default: CPU cores)
---domain https://example.com/map # base URL for OG meta tags and og-image.png
---status "My Server"             # live online/offline widget for an advertised server
-
-# List all snapshots
-node main.ts --list -o ./output
-
-# Rename a snapshot's label
-node main.ts --rename 20260312-143022 --label "New label" -o ./output
-
-# Remove a snapshot
-node main.ts --remove 20260312-143022 -o ./output
-
-# Serve result
-python3 -m http.server -d ./output
+uv run python3 -m http.server -d ./output
 ```
 
 ### Auto-discovery
 
-All three paths (binary, RCT2 data, RCT1 data) are auto-detected. CLI flags override when provided.
+Flags override each detected path. `findOpenRCT2()` tries `OpenRCT2-*.AppImage` or `OpenRCT2-*.exe` in cwd, newest version first, then the platform's well-known install paths, then on Windows extracted `OpenRCT2-*-windows-portable*` directories. Otherwise it returns the bare name `openrct2` for PATH lookup, which counts as nothing found.
 
-**OpenRCT2 binary** (`findOpenRCT2()`, override: `--openrct2`):
-1. cwd: `OpenRCT2-*.AppImage`, `OpenRCT2-*.exe` (newest version first)
-2. Well-known paths: `C:\Program Files\OpenRCT2\openrct2.exe` (Windows), `/usr/bin/openrct2` (Linux), `/Applications/OpenRCT2.app/...` (macOS)
-3. Extracted portable directories (Windows): `OpenRCT2-*-windows-portable*/openrct2.exe`
-4. PATH fallback: `openrct2`
+Unless `--openrct2` is set, a render that found nothing or a copy in cwd calls `downloadPortableOpenRCT2()` after the save-hash early-out, so unchanged saves make no network calls. It never replaces a well-known install. It fetches the latest GitHub release: the AppImage on Linux x86_64, or the x64 or arm64 portable zip on Windows, extracted with PowerShell `Expand-Archive`. Releases ship no AppImage for other architectures, and macOS gets no download. A release already present under its file name is skipped. `download()` streams to `<dest>.tmp` and renames it into place only when complete. If anything fails, the render warns and uses what discovery found.
 
-If no binary is found and `--openrct2` is not set, `downloadPortableOpenRCT2()` fetches the latest release from GitHub:
-- Linux: downloads the AppImage matching the CPU arch to cwd, makes it executable
-- Windows: downloads the portable zip, extracts via PowerShell `Expand-Archive`
-- macOS: not supported for auto-download
-- Already-downloaded files are detected by filename and skipped
+On Linux only, `findGameData()` tries `./assets/RCT`, then `game_path` or `rct1_path` from the user's own `$XDG_CONFIG_HOME/OpenRCT2/config.ini`, then Steam libraries under `~/.local/share/Steam` and `~/snap/steam/common/.local/share/Steam`. RCT2 data is found by `Data/g1.dat`, or `Assets/g1.dat` for RCT Classic; RCT1 data by `Data/csg1.dat`, or `Data/CSG1.DAT` as Steam ships it.
 
-**RCT2 game data** (`findRCT2Data()`, override: `--rct2-data-path`; auto-downloaded if missing), validated by `Data/g1.dat`:
-1. `./assets/RCT` (local project setup)
-2. Steam: `Rollercoaster Tycoon 2`, `RollerCoaster Tycoon Classic`
-3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon 2 Triple Thrill Pack`
-
-**RCT1 game data** (`findRCT1Data()`, override: `--rct1-data-path`), validated by `Data/csg1.dat`:
-1. `./assets/RCT` (same dir may contain both)
-2. Steam: `RollerCoaster Tycoon Deluxe`
-3. GOG (Windows): `C:\GOG Games\RollerCoaster Tycoon Deluxe`
-
-If RCT2 data is not found locally and `--rct2-data-path` is not set, `downloadGameAssets()` fetches the archive from `archive.org/download/OpenRCT2Assets/RCT.zip` and extracts it to `./assets/RCT/`. Handles nested zip structure (moves contents up if the zip contains a `RCT/` subdirectory). Uses `unzip` on Linux/macOS and PowerShell `Expand-Archive` on Windows.
-
-Steam paths checked per platform:
-- Linux: `~/.local/share/Steam/steamapps/common/...`, `~/snap/steam/common/.local/share/Steam/steamapps/common/...`
-- Windows: `C:\Program Files (x86)\Steam\steamapps\common\...`
-- macOS: `~/Library/Application Support/Steam/steamapps/common/...`
+If no RCT2 data is found, `downloadGameAssets()` streams `archive.org/download/OpenRCT2Assets/RCT.zip` to `assets/RCT/RCT.zip`, which keeps it off tmpfs and out of git. It extracts the zip with the `unzip` command into `assets/`, since every entry sits under `RCT/`, then deletes it. Discovery then runs again, so RCT1 data in the archive is picked up too. `Data/g1.dat` is extracted last, so an interrupted extraction is not discovered and the next run downloads again.
 
 ### Screenshot defaults
 
-When no screenshot flags are passed after `--`, these defaults are applied:
-- `--transparent` — transparent background (enables blank tile skipping)
-- `--tidy-up-park` — clears grass, waters plants, fixes vandalism, removes litter
-- `--weather=1` — forces sunny weather
-
-Each default is independently overridden: passing `--weather=3` replaces the sunny default but keeps `--transparent` and `--tidy-up-park`. Passing any individual tidy flag (e.g. `--clear-grass`) suppresses `--tidy-up-park`.
-
-### Screenshot flag enumeration
-
-`--help` runs the detected binary with `-ha`, parses the screenshot section, and appends those flags to the help output. If the binary isn't found or parsing fails, help still works — the dynamic section is simply omitted.
+`--transparent`, `--tidy-up-park` and `--weather=1` are added unless the flags after `--` already set them. Each default is replaced on its own: `--weather=3` replaces only the weather, and any flag that `--tidy-up-park` bundles (`--clear-grass`, `--water-plants`, `--fix-vandalism`, `--remove-litter`) drops `--tidy-up-park`.
 
 ## Timeline
 
 ### Cumulative snapshots
 
-Each run appends a new timestamped snapshot to the output directory. The output directory is a persistent archive — `timeline.json` tracks all snapshots. The HTML viewer is regenerated each run.
+Each run appends a snapshot under `snapshots/<YYYYMMDD-HHmmss>/`, records it in `timeline.json` and regenerates `index.html`. The label defaults to `new Date().toLocaleString()`. `timeline.json` is written to a temp file and renamed into place, so a crash never leaves it truncated.
 
-Timestamp format: `YYYYMMDD-HHmmss` (filesystem-safe, sorts lexicographically).
-
-Default label: `new Date().toLocaleString()`. Override with `--label`.
+`rotations` and `tileSize` sit at the top of `timeline.json`, apply to every snapshot and are read by the viewer. A run whose `--rotations` set or `--tile-size` differs exits with an error before rendering; use the matching flags, `--clear` or a new output directory. `--clear` deletes the old snapshots and `timeline.json` only once the new screenshots exist.
 
 ### Change detection (two-tier)
 
-**Save file hash (fast, early-out):** Before any screenshots are generated, a SHA-256 hash of the input save file is computed and compared against the last timepoint's `saveHash` field in `timeline.json`. If identical, the run is skipped immediately — no OpenRCT2 launch, no tiling. This is the common path for automated/cron runs against an unchanged file.
+**Save file hash:** a SHA-256 of the save file is compared with the last timepoint's `saveHash`. If they match, the run stops before game data discovery, downloads, OpenRCT2 or tiling. The hash covers only the save file, so changing `--zoom`, `--palette` or the flags after `--` on an unchanged save does nothing without `--force`.
 
-**Screenshot hash (fallback):** After generating screenshots but before tiling, a SHA-256 hash is computed over all giant PNGs (sorted by path). This hash is stored in `timeline.json` on each timepoint's `hash` field. If a different save file produces identical visible output (e.g., guest movement with `--no-peeps`), this second check catches it and skips tiling.
+**Screenshot hash:** after the screenshots and before tiling, a SHA-256 over all giant PNGs, sorted by path, is compared with the last timepoint's `hash`. This catches a changed save with identical visible output, such as guest movement under `--no-peeps`, and skips tiling.
 
-Both checks are bypassed by `--force`. Timepoints missing either hash field (created before these features) are never skipped.
+`--force` bypasses both checks. A timepoint missing either field never matches.
 
 ### Symlink-based deduplication
 
-After tiling a new snapshot, each tile is compared byte-for-byte (`Buffer.equals`) against the corresponding tile in the previous snapshot. Identical tiles are replaced with **relative symlinks** to the real file, keeping the output directory relocatable.
+After tiling, each tile byte-identical (`Buffer.equals`) to the same path in the previous snapshot becomes a relative symlink to the real file.
 
-Key invariants:
-- Symlinks always target real files (resolved via `realpathSync`), never other symlinks — no chains
-- Relative targets ensure the output dir can be moved or served from any location
-- Dedup stats are logged: `N/M tiles symlinked (X% saved)`
+- Targets are resolved with `realpathSync`, so links never chain.
+- Relative targets keep the output directory relocatable. The output directory itself is resolved with `realpathSync`, or targets would climb out through a symlink in the `-o` path.
+- Each link is created under a temp name and renamed over the tile. Where symlinks fail, as on Windows without Administrator rights or Developer Mode, the tile stays a regular file.
 
 ### Snapshot removal (`--remove`)
 
-`--remove <timestamp>` safely removes a snapshot:
-1. All symlinks in other snapshots that resolve into the doomed directory are **materialized** (replaced with copies of the real file content)
-2. The snapshot directory is deleted
-3. `timeline.json` is updated and `index.html` regenerated
+`--remove <timestamp>` refuses to remove the only remaining snapshot. Otherwise:
+1. The entry leaves `timeline.json`, the top-level `maxZoom`, `imageWidth` and `imageHeight` are recomputed, and `index.html` is regenerated.
+2. Symlinks in other snapshots that resolve into the doomed directory are replaced with copies of their files.
+3. The snapshot directory is deleted, if it still exists.
 
-This ensures no dangling symlinks after removal.
+An interrupted removal leaves an orphaned snapshot, which the next render's cleanup finishes.
 
 ### Stale artifact cleanup
 
-At the start of every run, `cleanupStaleArtifacts()` scans the output directory for leftovers from crashed or killed previous runs:
+Each render starts with `cleanupStaleArtifacts()`, which deletes leftovers of crashed or killed runs. `--list`, `--rename` and `--remove` skip it. A render in progress has the same artifacts, so two renders must never share an output directory at once.
 
-1. **Giant PNGs** (`giant_r*_z*.png` in output dir) — intermediate screenshots that should never persist
-2. **Temp tile dirs** (`.tmp-nz-*` inside any snapshot dir) — intermediate dirs from native zoom assembly
-3. **Orphaned snapshots** (dirs under `snapshots/` not referenced in `timeline.json`) — partially-tiled snapshots from runs that crashed before writing the manifest
+1. **Giant PNGs:** `giant_r*_z*.png` in the output directory
+2. **Temp tile dirs:** `.tmp-nz-*` inside any snapshot, from native zoom assembly
+3. **Orphaned snapshots:** directories under `snapshots/` missing from `timeline.json`, left by a crashed render or an interrupted `--remove`
 
-Orphaned snapshot removal follows the same safety protocol as `--remove`: symlinks in other snapshots that resolve into the orphan are materialized before deletion. This is defensive — in practice, symlinks are only created after successful tiling, so orphans from crashed runs are unlikely to be symlink targets.
+Orphans are deleted with the same symlink materialization as `--remove`. That step is skipped when `timeline.json` is missing, since every snapshot would then look orphaned.
 
-### Legacy migration
+### Viewer
 
-If the output directory contains `tiles/` but no `timeline.json` (pre-timeline format), the tool auto-migrates: `tiles/` is moved to `snapshots/migrated/` and a single-entry manifest is created.
+The current snapshot's label shows bottom-left in the RCT2 font and as the `<title>`. Previous/next buttons appear only with more than one snapshot, and the rotate button and `R` key work only with more than one rotation. Switching snapshots keeps the view and builds tile layers on first visit. `←`/`→` step through snapshots, and pan as usual at either end.
 
-### Timeline viewer
-
-When multiple snapshots exist, the HTML viewer shows timeline controls (top-left):
-- **Previous/Next buttons** — `previous.png`/`next.png` (RCT2-style pixel art)
-- **Label** — current snapshot label displayed in RCT2 font (`rct2.otf.woff2`), bottom-left corner
-- **`<title>`** — set to the current snapshot's label, updated dynamically when switching
-- Map position and zoom are preserved when switching timepoints
-- Tile layers are created lazily (only when a timepoint is first visited)
-
-Single-snapshot output has no prev/next buttons — identical to original behavior.
-
-### URL hash state
-
-The viewer persists map state in the URL hash fragment (`#z=3&lat=-5.00&lng=4.00&r=0&t=1`), enabling shareable links to a specific view. Parameters: `z` (zoom), `lat`/`lng` (center), `r` (rotation), `t` (timepoint index). On load, these override defaults; on interaction, the hash is updated via `history.replaceState` (debounced 150ms). Missing or invalid parameters fall back to defaults (fit bounds, rotation 0, latest timepoint).
-
-### Rotation button
-
-The rotate button is hidden when `CONFIG.rotations` has only one entry (e.g. `--rotations 0`). Since rotations are per-output-directory (stored in `timeline.json`), this applies to all snapshots in the timeline.
+The URL hash, such as `#z=3&lat=-5.00&lng=4.00&r=0&t=1`, holds zoom, center, rotation and timepoint index, debounced through `history.replaceState`. Without a valid `z`, `lat` and `lng`, the map fits its bounds. An unknown `r` falls back to the first rendered rotation. A missing `t` means the latest snapshot, and an out-of-range `t` is clamped. `t` is an index, so shared links shift after `--remove`.
 
 ### Server status widget (`--status`)
 
-`--status <name>` adds a top-right widget showing whether a multiplayer server is online, with its player count. The viewer fetches `https://servers.openrct2.io/` from the browser every 60 seconds while the tab is visible. The request must send `Accept: application/json`, or the endpoint serves its HTML page instead. The endpoint sends `Access-Control-Allow-Origin: *`, so no backend is needed.
+`--status <name>` adds a top-right widget with a multiplayer server's online state and player count. The browser fetches `https://servers.openrct2.io/` every 60 seconds while the tab is visible. The request must send `Accept: application/json`, or the endpoint serves HTML. It allows any origin, so no backend is needed.
 
-Matching ignores formatting codes like `{YELLOW}`, case, and repeated whitespace. Only servers with `advertise = true` in their config appear in the list, so an unadvertised server always shows Offline. A failed fetch shows Unknown, not Offline.
+Matching ignores formatting codes like `{YELLOW}`, case and repeated whitespace. The list holds only servers with `advertise = true`, so an unadvertised server always shows Offline. A failed fetch, or one over 10 seconds, shows Unknown, not Offline.
 
 Like `--domain`, the flag is not stored in `timeline.json`. Pass it to `--rename` and `--remove` too, or the regenerated viewer drops the widget.
 
 ### OpenGraph / social preview (`--domain`)
 
-Social media crawlers (Facebook, Twitter/X, Discord, Slack, iMessage) do **not** execute JavaScript — they parse raw HTML only. This means `og:image` must use an absolute URL to work.
-
-The `--domain <url>` flag controls OG tag generation:
-
-- **Without `--domain`:** Only basic meta tags are emitted (`og:type`, `og:title`, `og:description`). No `og:image`, `og:url`, `twitter:card`, or `<base>` tag. No `og-image.png` is generated. This avoids emitting broken relative URLs.
-- **With `--domain`:** The generated HTML includes `<base href>`, `<meta property="og:url">`, `<meta property="og:image">` (absolute URL), and `<meta name="twitter:card">`. An `og-image.png` (1200x630, cropped from center of first rotation) is generated in the output directory.
+Crawlers do not run JavaScript, so `og:image` must be an absolute URL built from `--domain`. With it, the page adds `og:url`, `og:image` and `twitter:card`, and each render writes `og-image.png`: a center crop of the first rotation at the finest zoom, at most 1200x630. Renders of at least 2400x1260 are cropped at that size and halved with nearest-neighbour.

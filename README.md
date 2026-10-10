@@ -4,62 +4,57 @@
 [![Node.js](https://img.shields.io/badge/Node.js-6DA55F?logo=node.js&logoColor=white)](#)
 [![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)](#)
 
-Generate a zoomable, pannable Leaflet tile map from any OpenRCT2 park save — like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft, but for RollerCoaster Tycoon 2.
+Generate a zoomable, pannable Leaflet map from any OpenRCT2 park save, like [Dynmap](https://github.com/webbukkit/dynmap) or [Unmined](https://unmined.net/) for Minecraft.
 
 [![Screenshot](assets/screenshot.png)](https://leoherzog.github.io/openrct2-map/)
-*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for an example render. Thanks to fidwell for the awesome [Cedar Point re-creation](https://rctgo.com/downloads/view/cedar-point.22290) and to Mulpje for the astounding [Tranquality Park](https://rctgo.com/downloads/view/tranquility-park.19354) park files!*
+*See [leoherzog.github.io/openrct2-map](https://leoherzog.github.io/openrct2-map/) for an example render. Thanks to fidwell for the awesome [Cedar Point re-creation](https://rctgo.com/downloads/view/cedar-point.22290) and Mulpje for the astounding [Tranquility Park](https://rctgo.com/downloads/view/tranquility-park.19354)!*
 
 ## Requirements
 
 | Requirement | Notes |
 |---|---|
-| **OpenRCT2** | Auto-downloaded on first run, or pass `--openrct2 <path>` |
-| **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | Auto-downloaded on first run, or place in `./assets/RCT/` |
-| **Node.js 24+** | Run `npm install` once to fetch dependencies |
+| **OpenRCT2** | Auto-downloaded on Linux x86_64 and Windows |
+| **[RCT2 game assets](https://archive.org/details/OpenRCT2Assets)** | Auto-downloaded on Linux, which needs `unzip` |
+| **RCT1 game assets** | Only for parks with RCT1 objects or scenarios |
+| **Node.js 24+** | Run `npm install` once |
 
-On first run, the tool will automatically download the latest OpenRCT2 portable binary (Linux/Windows) and RCT2 game assets if they aren't already present. Use `--openrct2` or `--rct2-data-path` to skip auto-download for that component.
+The tool looks for OpenRCT2 in the current directory and in standard install locations. If it finds none on Linux x86_64 or Windows, it downloads the latest portable release to the current directory and keeps it up to date. An `openrct2` found only on your `PATH` does not count, so pass `--openrct2 openrct2` to use it.
 
-RCT1 data (`Data/csg1.dat`) is only required if your park uses RCT1 objects (rides, scenery, paths) or RCT1 scenarios.
+On Linux, the tool looks for game data in `./assets/RCT/`, then at `game_path` and `rct1_path` in OpenRCT2's own `config.ini`, then in Steam. Missing RCT2 data is downloaded to `./assets/RCT/`. On Windows and macOS, OpenRCT2 reads only its own `config.ini`, so run it once and point it at your game.
 
 ## Usage
 
 > [!IMPORTANT]
-> Multiple runs will build up timeline history in the output directory. Only the deltas are saved between runs. This saves storage space, but means **you cannot simply remove a directory to clear snapshots without breaking symbolic links**. Use the `--remove` flag to clear unwanted snapshots from history, and the `--clear` flag to clear all snapshots and start fresh.
+> Unchanged tiles are symbolic links into earlier snapshots, so **deleting a snapshot directory by hand breaks them**. Use `--remove` or `--clear` instead. On Windows, without **Administrator privileges** or [**Developer Mode**](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development), unchanged tiles are copied, not linked.
+>
+> Never run two renders into the same output directory at once, or they delete each other's unfinished files.
 
 ```sh
-# Install dependencies (once)
-npm install
-
 # Render a park and serve the result
 node main.ts MyPark.park -o ./output
 uv run python3 -m http.server -d ./output
 
-# Build up a timeline — each run adds a snapshot
-# (unchanged maps are skipped automatically)
-node main.ts MyPark.park -o ./output --label "Week 1"
+# Add a snapshot, skipped while the save file is unchanged, even with new flags
 node main.ts MyPark.park -o ./output --label "Week 2"
 
-# Force a snapshot even if the map hasn't changed
-node main.ts MyPark.park -o ./output --force --label "Week 2 (copy)"
+# Snapshot even if the map is unchanged
+node main.ts MyPark.park -o ./output --force
 
-# Override screenshot flags (stormy weather, no guests)
+# Override screenshot flags (cloudy weather, no guests)
 node main.ts MyPark.park -o ./output -- --weather=3 --no-peeps
 
-# List all snapshots
+# List, rename and remove snapshots
 node main.ts --list -o ./output
-
-# Rename a snapshot's label
 node main.ts --rename 20260312-143022 --label "New label" -o ./output
-
-# Remove a snapshot
 node main.ts --remove 20260312-143022 -o ./output
 
-# Clear all snapshots and start fresh
+# Start fresh, as needed to change --rotations or --tile-size
 node main.ts MyPark.park -o ./output --clear
 ```
 
-> [!NOTE]
-> On Windows, tile deduplication uses symbolic links, which require either **Administrator privileges** or [**Developer Mode**](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development) to be enabled (Settings → Update & Security → For developers). Without one of these, you'll get `os error 1314: A required privilege is not held by the client`.
+`--domain` and `--status` are not saved, so pass them to every render, `--rename` and `--remove`. `--status` sees only servers with `advertise = true` in their config, and shows others as Offline.
+
+In the viewer, `R` rotates the map and `←`/`→` step through snapshots. The address bar holds the view for sharing, though `--remove` can shift which snapshot a link shows.
 
 ## `node main.ts --help`
 
@@ -71,10 +66,10 @@ Options:
   -o, --output <dir>       Output directory (default: ./output)
   --zoom <n>               Finest OpenRCT2 zoom level, 0 = closest (default: 1)
                            Renders at zoom n through 3 for native sprites at each level
-  --rotations <list>       Comma-separated rotations to render (default: 0,1,2,3)
+  --rotations <list>       Comma-separated rotations 0-3 to render (default: 0,1,2,3)
   --openrct2 <path>        Path to openrct2 binary/AppImage (default: auto-detect)
-  --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [auto-detected]
-  --rct1-data-path <path>  Path to RCT1 data dir (containing Data/csg1.dat) [auto-detected]
+  --rct2-data-path <path>  Path to RCT2 data dir (containing Data/g1.dat) [Linux only, auto-detected]
+  --rct1-data-path <path>  Path to RCT1 data dir (containing Data/csg1.dat) [Linux only, auto-detected]
   --label <text>           Label for this snapshot (default: current date/time)
   --list                   List all snapshots in the output directory
   --rename <timestamp>     Rename a snapshot label (use with --label)
@@ -83,18 +78,22 @@ Options:
   --force                  Save snapshot even if map is unchanged from last run
   --tile-size <n>          Tile size in pixels (default: 256)
   --compression <0-9>      PNG compression level (default: 6, 0 = fastest)
-  --effort <1-10>          PNG compression effort/strategy tuning
+  --effort <1-10>          Palette quantization effort (default: 7, implies --palette)
+                           Below 4 is faster but lossy
   --palette                Use indexed-color PNG (smaller files for pixel art)
-  --skip-blanks <n>        Alpha threshold for skipping blank tiles (default: -1)
+  --skip-blanks <n>        Skip tiles within n of transparent (default: 0)
+                           Use --skip-blanks=-1 to keep every tile
   --concurrency <n>        Sharp/libvips thread count (default: CPU cores)
   --single-zoom            Only render at the specified zoom level (skip native zoom pyramid)
   --domain <url>           Base URL for OG tags (e.g. https://example.com/map)
   --status <name>          Show live online/offline status of this advertised server
   -h, --help               Show this help
 
-Auto-download: If no OpenRCT2 binary or game assets are found, the tool will
-  attempt to download them automatically (GitHub Releases / archive.org).
-  Use --openrct2 or --rct2-data-path to skip auto-download for that component.
+Auto-download: without --openrct2, a render that finds no OpenRCT2, or finds a
+  portable copy in the current directory, downloads the latest release there if
+  missing (Linux x86_64, Windows). An install in a standard path is never replaced.
+  On Linux, RCT2 assets are downloaded to ./assets/RCT unless found or
+  --rct2-data-path is set. Elsewhere OpenRCT2 uses game_path from its own config.ini.
 
 Screenshot defaults (applied unless you override that specific flag after --):
   --transparent, --tidy-up-park, --weather=1
@@ -120,7 +119,7 @@ OpenRCT2 screenshot flags (pass after --):
 
 ### License
 
-Feel free to take a look at the source and adapt as you please. This source is licensed as follows:
+Feel free to take a look at the source and adapt as you please.
 
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-sa/4.0/)
 
@@ -129,7 +128,7 @@ openrct2-map is licensed under a [Creative Commons Attribution-ShareAlike 4.0 In
 ### Thanks
 
 This project wouldn't be possible without:
-- [OpenRCT2](https://openrct2.io/) — the open-source re-implementation that makes this possible
+- [OpenRCT2](https://openrct2.io/) — the open-source re-implementation of RollerCoaster Tycoon 2
 - [Chris Sawyer](https://www.chrissawyergames.com/) — legendary creator of the original RollerCoaster Tycoon
 - [The Spriters Resource](https://www.spriters-resource.com/pc_computer/rollercoastertycoon2/asset/135826/) — extracted RCT2 sprite assets
 - [RCT2 Font](https://fontstruct.com/fontstructions/show/465125/rct2) — recreation of the RollerCoaster Tycoon 2 bitmap typeface
